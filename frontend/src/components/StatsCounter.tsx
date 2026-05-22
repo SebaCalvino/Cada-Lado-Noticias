@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Layers, Eye, BarChart2 } from 'lucide-react'
+import { Layers, Eye, BarChart2, type LucideProps } from 'lucide-react'
+import type { ForwardRefExoticComponent, RefAttributes } from 'react'
+
+type LucideIcon = ForwardRefExoticComponent<Omit<LucideProps, 'ref'> & RefAttributes<SVGSVGElement>>
 
 interface StatsData {
   total_clusters: number
@@ -38,7 +41,7 @@ function StatItem({
   label,
   started,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>
+  icon: LucideIcon
   value: number
   label: string
   started: boolean
