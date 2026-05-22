@@ -1,3 +1,5 @@
+'use client'
+
 import type { ClusterArticle } from '@/types'
 import { ExternalLink, AlertTriangle, CheckCircle } from 'lucide-react'
 
