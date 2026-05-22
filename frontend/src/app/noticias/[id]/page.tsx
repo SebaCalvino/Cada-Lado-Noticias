@@ -197,11 +197,13 @@ export default async function NoticiaDetailPage({ params }: Props) {
                             i === 0
                               ? // Lead paragraph: larger serif with drop cap
                                 'text-xl md:text-2xl font-serif font-medium text-gray-900 leading-relaxed mb-6 first-letter:text-[4.5rem] first-letter:font-serif first-letter:font-bold first-letter:float-left first-letter:leading-[0.8] first-letter:mr-2 first-letter:mt-1'
-                              : 'text-[16px] md:text-[17px] text-gray-700 leading-[1.85] mb-5'
+                              : 'text-[16px] md:text-[17px] text-gray-700 leading-[1.9] mb-7 indent-6 max-w-[70ch]'
                           }
                         >
-                          {i === 0 ? <HighlightNumbers text={trimmed} /> : <HighlightNumbers text={trimmed} />}
+                          <HighlightNumbers text={trimmed} />
                         </p>
+                        {/* Visual divider between lead and body */}
+                        {i === 0 && <hr className="my-6 border-gray-100" />}
                       </Fragment>
                     )
                   })}
@@ -214,10 +216,11 @@ export default async function NoticiaDetailPage({ params }: Props) {
 
             {/* Per-source coverage */}
             {cluster.articles.length > 0 && (
-              <section className="mt-10 border-t border-gray-100 pt-8">
-                <h2 className="font-serif font-bold text-2xl text-gray-900 mb-5">
-                  Cómo lo cubrió cada medio
+              <section className="mt-10 pt-6 border-t-2 border-gray-900">
+                <h2 className="font-serif font-bold text-2xl text-gray-900 mb-2">
+                  Lo que dijo cada medio
                 </h2>
+                <p className="text-sm text-gray-500 mb-5">Qué enfatizó cada diario y qué omitió deliberadamente</p>
                 <div className="space-y-4">
                   {cluster.articles.map(article => (
                     <CoverageBar key={article.source_slug} article={article} />
