@@ -42,7 +42,7 @@ export default async function Footer() {
           <div className="md:col-span-1">
             <Link href="/" className="inline-block mb-5">
               <Image
-                src="/CadaLadoLogoCompleto.png"
+                src="/CadaLadoLogoCompleto.svg"
                 alt="Cada Lado Noticias"
                 width={160}
                 height={40}

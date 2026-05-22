@@ -21,7 +21,7 @@ export default function Header() {
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
           {/* Mobile: solo isotipo circular */}
           <Image
-            src="/CadaLadoLogoCL.png"
+            src="/CadaLadoLogoCL.svg"
             alt="CL"
             width={32}
             height={32}
@@ -30,10 +30,10 @@ export default function Header() {
           />
           {/* Desktop: logo horizontal completo */}
           <Image
-            src="/CadaLadoLogoCompleto.png"
+            src="/CadaLadoLogoCompleto.svg"
             alt="Cada Lado Noticias"
-            width={180}
-            height={44}
+            width={200}
+            height={48}
             className="hidden sm:block object-contain h-10 w-auto"
             priority
           />
