@@ -1,6 +1,6 @@
 # Cada Lado Noticias
 
-**La misma noticia, todas las voces. Sin que te vendan humo.**
+**La misma noticia, todas las voces. Sin que te vendan humo..**
 
 Plataforma de síntesis neutral de noticias argentinas. Scrapeamos 8 medios, agrupamos noticias sobre el mismo hecho y usamos IA para generar una síntesis imparcial + análisis de qué enfatiza y omite cada medio.
 

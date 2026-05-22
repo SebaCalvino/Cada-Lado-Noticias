@@ -197,11 +197,13 @@ export default async function NoticiaDetailPage({ params }: Props) {
                             i === 0
                               ? // Lead paragraph: larger serif with drop cap
                                 'text-xl md:text-2xl font-serif font-medium text-gray-900 leading-relaxed mb-6 first-letter:text-[4.5rem] first-letter:font-serif first-letter:font-bold first-letter:float-left first-letter:leading-[0.8] first-letter:mr-2 first-letter:mt-1'
-                              : 'text-[16px] md:text-[17px] text-gray-700 leading-[1.85] mb-5'
+                              : 'text-[16px] md:text-[17px] text-gray-700 leading-[1.9] mb-7 indent-6 max-w-[70ch]'
                           }
                         >
-                          {i === 0 ? <HighlightNumbers text={trimmed} /> : <HighlightNumbers text={trimmed} />}
+                          <HighlightNumbers text={trimmed} />
                         </p>
+                        {/* Visual divider between lead and body */}
+                        {i === 0 && <hr className="my-6 border-gray-100" />}
                       </Fragment>
                     )
                   })}
@@ -214,10 +216,11 @@ export default async function NoticiaDetailPage({ params }: Props) {
 
             {/* Per-source coverage */}
             {cluster.articles.length > 0 && (
-              <section className="mt-10 border-t border-gray-100 pt-8">
-                <h2 className="font-serif font-bold text-2xl text-gray-900 mb-5">
-                  Cómo lo cubrió cada medio
+              <section className="mt-10 pt-6 border-t-2 border-gray-900">
+                <h2 className="font-serif font-bold text-2xl text-gray-900 mb-2">
+                  Lo que dijo cada medio
                 </h2>
+                <p className="text-sm text-gray-500 mb-5">Qué enfatizó cada diario y qué omitió deliberadamente</p>
                 <div className="space-y-4">
                   {cluster.articles.map(article => (
                     <CoverageBar key={article.source_slug} article={article} />
@@ -266,14 +269,31 @@ export default async function NoticiaDetailPage({ params }: Props) {
                   cronista:     { score:  0.2, label: 'Centro' },
                   perfil:       { score: -0.1, label: 'Centro' },
                   laizquierda:  { score: -0.8, label: 'Izquierda' },
+                  tn:           { score:  0.2, label: 'Centro' },
+                  eldestape:    { score: -0.5, label: 'Centro-izquierda' },
+                  mdzol:        { score:  0.0, label: 'Centro' },
+                  minutouno:    { score: -0.2, label: 'Centro' },
                 }
-                const sources = cluster.articles.map(a => ({
-                  slug:  a.source_slug,
-                  name:  a.source_name,
-                  color: a.source_color,
-                  score: IDEOLOGY[a.source_slug]?.score ?? 0,
-                  label: IDEOLOGY[a.source_slug]?.label ?? 'Centro',
+
+                // Sort by ideology score and assign rainbow colors based on position
+                const sorted = [...cluster.articles]
+                  .map(a => ({
+                    slug:  a.source_slug,
+                    name:  a.source_name,
+                    score: IDEOLOGY[a.source_slug]?.score ?? 0,
+                    label: IDEOLOGY[a.source_slug]?.label ?? 'Centro',
+                  }))
+                  .sort((a, b) => a.score - b.score)
+
+                const n = sorted.length
+                // Assign rainbow hues: left=blue(240°) → right=orange-red(30°)
+                const withColor = sorted.map((s, i) => ({
+                  ...s,
+                  dotColor: n === 1
+                    ? 'hsl(135,80%,42%)'
+                    : `hsl(${240 - (i / (n - 1)) * 210},85%,48%)`,
                 }))
+
                 return (
                   <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
                     <h3 className="font-bold text-gray-800 text-xs uppercase tracking-widest mb-4">
@@ -288,23 +308,26 @@ export default async function NoticiaDetailPage({ params }: Props) {
                         className="h-2 rounded-full"
                         style={{ background: 'linear-gradient(to right, #2563eb, #9ca3af, #dc2626)' }}
                       />
-                      {sources.map(s => (
+                      {withColor.map(s => (
                         <div
                           key={s.slug}
                           title={`${s.name} · ${s.label}`}
-                          className="absolute top-[18px] -translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-md cursor-default"
+                          className="absolute top-[18px] -translate-x-1/2 w-4 h-4 rounded-full border-2 border-white shadow-lg cursor-default"
                           style={{
                             left: `${((s.score + 1) / 2) * 100}%`,
-                            backgroundColor: s.color,
+                            backgroundColor: s.dotColor,
                           }}
                         />
                       ))}
                     </div>
                     <ul className="space-y-2">
-                      {[...sources].sort((a, b) => a.score - b.score).map(s => (
+                      {withColor.map(s => (
                         <li key={s.slug} className="flex items-center justify-between text-xs">
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                          <span className="flex items-center gap-2">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: s.dotColor }}
+                            />
                             <span className="font-medium text-gray-700">{s.name}</span>
                           </span>
                           <span className="text-gray-400">{s.label}</span>

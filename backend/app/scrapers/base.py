@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -34,10 +35,40 @@ class BaseNewsScraper(ABC):
 
     async def get_articles(self) -> List[ArticleData]:
         try:
-            return await self._fetch_from_rss()
+            articles = await self._fetch_from_rss()
+            await self._enrich_images(articles)
+            return articles
         except Exception as e:
             logger.error(f"[{self.source_slug}] RSS failed: {e}")
             return []
+
+    async def _enrich_images(self, articles: List[ArticleData]) -> None:
+        """Fetch og:image for articles that have no image from RSS (parallel, max 8)."""
+        no_image = [a for a in articles if not a.image_url][:8]
+        if not no_image:
+            return
+        tasks = [self._fetch_og_image(a.url) for a in no_image]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for art, img in zip(no_image, results):
+            if isinstance(img, str) and img:
+                art.image_url = img
+
+    @staticmethod
+    async def _fetch_og_image(url: str) -> Optional[str]:
+        try:
+            async with httpx.AsyncClient(headers=HEADERS, timeout=8, follow_redirects=True) as client:
+                resp = await client.get(url)
+            if resp.status_code != 200:
+                return None
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(resp.text, "lxml")
+            for attr in ("og:image", "twitter:image"):
+                tag = soup.find("meta", property=attr) or soup.find("meta", attrs={"name": attr})
+                if tag and tag.get("content", "").startswith("http"):
+                    return tag["content"]
+        except Exception:
+            pass
+        return None
 
     async def _fetch_from_rss(self) -> List[ArticleData]:
         async with httpx.AsyncClient(headers=HEADERS, timeout=20, follow_redirects=True) as client:

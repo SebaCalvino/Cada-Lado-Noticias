@@ -6,6 +6,10 @@ from .ambito import AmbitoScraper
 from .cronista import CronistaScraper
 from .perfil import PerfilScraper
 from .laizquierda import LaIzquierdaScraper
+from .tn import TNScraper
+from .eldestape import ElDestapeScraper
+from .mdzol import MDZScraper
+from .minutouno import MinutoUnoScraper
 
 ALL_SCRAPERS = [
     ClarinScraper(),
@@ -16,4 +20,8 @@ ALL_SCRAPERS = [
     CronistaScraper(),
     PerfilScraper(),
     LaIzquierdaScraper(),
+    TNScraper(),
+    ElDestapeScraper(),
+    MDZScraper(),
+    MinutoUnoScraper(),
 ]

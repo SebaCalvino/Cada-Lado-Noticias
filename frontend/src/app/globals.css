@@ -4,16 +4,34 @@
 
 @layer base {
   :root {
-    --font-inter: 'Inter', system-ui, sans-serif;
-    --font-playfair: 'Playfair Display', Georgia, serif;
+    --font-serif-heading: 'Roboto Slab', Georgia, serif;
+    --font-sans-body: 'Inter', system-ui, sans-serif;
+    --cada-blue: #0052CC;
+    --cada-dark: #0F172A;
+    --cada-light: #F8FAFC;
+  }
+
+  html {
+    scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-white text-cada-dark antialiased;
+    font-family: var(--font-sans-body);
   }
 
-  h1, h2, h3 {
-    @apply font-serif;
+  h1, h2, h3, h4 {
+    font-family: var(--font-serif-heading);
+  }
+
+  ::selection {
+    background-color: #0052CC;
+    color: white;
+  }
+
+  *:focus-visible {
+    outline: 2px solid #0052CC;
+    outline-offset: 2px;
   }
 }
 
@@ -29,4 +47,32 @@
   .btn-primary {
     @apply bg-gray-900 hover:bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors;
   }
+}
+
+/* News ticker animation */
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker-track {
+  display: inline-block;
+  animation: ticker-scroll 55s linear infinite;
+  will-change: transform;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* Smooth transition durations not in Tailwind defaults */
+.duration-800 {
+  transition-duration: 800ms;
+}
+.duration-600 {
+  transition-duration: 600ms;
 }

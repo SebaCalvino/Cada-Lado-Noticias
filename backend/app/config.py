@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://cadalado:cadalado@db:5432/cadalado"
     SECRET_KEY: str = "dev-secret-change-in-prod"
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
-    CLUSTERING_THRESHOLD: float = 0.15
+    CLUSTERING_THRESHOLD: float = 0.12
     ARTICLES_PER_SCRAPE: int = 30
 
     class Config:

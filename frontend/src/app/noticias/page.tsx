@@ -48,7 +48,7 @@ export default async function NoticiasPage({ searchParams }: Props) {
       {/* Page header */}
       <div className="mb-8 border-b border-gray-200 pb-6">
         <p className="text-xs text-gray-400 uppercase tracking-widest mb-2 font-medium">{today}</p>
-        <h1 className="text-4xl font-serif font-bold text-gray-900">
+        <h1 className="text-4xl md:text-5xl font-serif font-bold text-gray-900 leading-tight">
           {category ? category : 'Últimas noticias'}
         </h1>
         {!category && (
@@ -62,10 +62,10 @@ export default async function NoticiasPage({ searchParams }: Props) {
       <div className="flex flex-wrap gap-1 mb-8 border-b border-gray-200">
         <Link
           href="/noticias"
-          className={`px-4 py-2 text-sm font-medium transition-colors relative -mb-px ${
+          className={`px-4 py-2.5 text-sm transition-colors relative -mb-px ${
             !category
-              ? 'text-gray-900 border-b-2 border-gray-900'
-              : 'text-gray-500 hover:text-gray-900 border-b-2 border-transparent'
+              ? 'text-gray-900 font-bold border-b-[3px] border-gray-900'
+              : 'font-medium text-gray-500 hover:text-gray-900 border-b-2 border-transparent'
           }`}
         >
           Todas
@@ -77,8 +77,8 @@ export default async function NoticiasPage({ searchParams }: Props) {
             <Link
               key={cat.category}
               href={`/noticias?category=${encodeURIComponent(cat.category)}`}
-              className={`px-4 py-2 text-sm font-medium transition-colors relative -mb-px border-b-2 ${
-                active ? 'text-gray-900' : 'text-gray-500 hover:text-gray-800 border-transparent'
+              className={`px-4 py-2.5 text-sm transition-colors relative -mb-px border-b-[3px] ${
+                active ? 'font-bold' : 'font-medium text-gray-500 hover:text-gray-800 border-transparent'
               }`}
               style={active ? { borderBottomColor: color, color } : undefined}
             >
@@ -98,18 +98,34 @@ export default async function NoticiasPage({ searchParams }: Props) {
         </div>
       ) : (
         <>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {clusters.map(cluster => (
-              <NewsCard key={cluster.id} cluster={cluster} />
-            ))}
+          <div>
+            {Array.from({ length: Math.ceil(clusters.length / 3) }, (_, groupIdx) => {
+              const group = clusters.slice(groupIdx * 3, groupIdx * 3 + 3)
+              return (
+                <div key={groupIdx}>
+                  {groupIdx > 0 && (
+                    <div className="flex items-center gap-4 my-8">
+                      <hr className="flex-1 border-gray-200" />
+                      <span className="text-xs text-gray-300 font-medium uppercase tracking-widest shrink-0">· · ·</span>
+                      <hr className="flex-1 border-gray-200" />
+                    </div>
+                  )}
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {group.map(cluster => (
+                      <NewsCard key={cluster.id} cluster={cluster} />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-center gap-4 mt-10">
+          <div className="flex items-center justify-center gap-4 mt-12">
             {page > 1 && (
               <Link
                 href={`/noticias?page=${page - 1}${category ? `&category=${encodeURIComponent(category)}` : ''}`}
-                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-400 transition-colors"
+                className="px-5 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-500 hover:text-gray-900 transition-colors"
               >
                 ← Anterior
               </Link>
@@ -117,9 +133,9 @@ export default async function NoticiasPage({ searchParams }: Props) {
             {clusters.length === 20 && (
               <Link
                 href={`/noticias?page=${page + 1}${category ? `&category=${encodeURIComponent(category)}` : ''}`}
-                className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
+                className="px-6 py-3 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors shadow-sm"
               >
-                Siguiente →
+                Cargar más noticias →
               </Link>
             )}
           </div>
