@@ -99,19 +99,25 @@ export default async function NoticiasPage({ searchParams }: Props) {
       ) : (
         <>
           <div>
-            {clusters.map((cluster, idx) => (
-              <>
-                {idx > 0 && idx % 3 === 0 && (
-                  <hr key={`sep-${idx}`} className="my-8 border-gray-200" />
-                )}
-                <div
-                  key={cluster.id}
-                  className={`${idx % 3 === 0 ? 'grid md:grid-cols-2 lg:grid-cols-3 gap-5' : ''}`}
-                >
-                  <NewsCard cluster={cluster} />
+            {Array.from({ length: Math.ceil(clusters.length / 3) }, (_, groupIdx) => {
+              const group = clusters.slice(groupIdx * 3, groupIdx * 3 + 3)
+              return (
+                <div key={groupIdx}>
+                  {groupIdx > 0 && (
+                    <div className="flex items-center gap-4 my-8">
+                      <hr className="flex-1 border-gray-200" />
+                      <span className="text-xs text-gray-300 font-medium uppercase tracking-widest shrink-0">· · ·</span>
+                      <hr className="flex-1 border-gray-200" />
+                    </div>
+                  )}
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {group.map(cluster => (
+                      <NewsCard key={cluster.id} cluster={cluster} />
+                    ))}
+                  </div>
                 </div>
-              </>
-            ))}
+              )
+            })}
           </div>
 
           {/* Pagination */}

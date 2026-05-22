@@ -43,7 +43,7 @@ export default async function Footer() {
               <div className="w-10 h-10 rounded-lg bg-[#0f172a] border border-white/20 flex items-center justify-center">
                 <span className="text-white font-bold text-sm">CL</span>
               </div>
-              <span className="text-white font-bold text-lg">Cada Lado</span>
+              <span className="text-white font-black text-base tracking-widest uppercase">CADA LADO</span>
             </Link>
             <p className="text-sm text-gray-400 leading-relaxed mb-6">
               La misma noticia, todas las voces. Sin que te vendan humo.
@@ -119,7 +119,7 @@ export default async function Footer() {
       {/* Bottom bar */}
       <div className="border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-          <span>© {new Date().getFullYear()} Cada Lado Noticias · Síntesis generada con IA · Argentina</span>
+          <span>© {new Date().getFullYear()} CADA LADO Noticias · Síntesis generada con IA · Argentina</span>
           <div className="flex gap-4">
             <Link href="#" className="hover:text-gray-300 transition-colors">Acerca de</Link>
             <Link href="#" className="hover:text-gray-300 transition-colors">Términos y Condiciones</Link>

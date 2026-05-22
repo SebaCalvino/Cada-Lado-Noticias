@@ -15,7 +15,7 @@ export default async function FuentesPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-serif font-bold text-gray-900 mb-2">Medios monitoreados</h1>
+      <h1 className="font-sans font-black uppercase tracking-wider text-3xl text-gray-900 mb-2">MEDIOS MONITOREADOS</h1>
       <p className="text-gray-600 mb-8">
         Analizamos {sources.length} medios argentinos que representan todo el espectro ideológico.
       </p>
@@ -74,7 +74,7 @@ export default async function FuentesPage() {
         ))}
       </div>
 
-      <div className="mt-8 bg-gray-50 rounded-xl border border-gray-200 p-5 text-sm text-gray-600">
+      <div className="mt-8 bg-gray-50 rounded-xl border border-gray-200 p-5 text-sm text-gray-600 border-l-4 border-l-gray-300 pl-4">
         <strong className="text-gray-900">Nota metodológica:</strong> La posición ideológica es una estimación basada en análisis
         de cobertura periodística y no representa una valoración positiva o negativa de ningún medio.
         Cada posicionamiento es discutible y puede cambiar con el tiempo.
