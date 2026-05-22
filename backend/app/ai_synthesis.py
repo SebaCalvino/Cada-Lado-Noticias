@@ -1,0 +1,132 @@
+import json
+import logging
+from dataclasses import dataclass
+from typing import List, Dict, Optional
+
+import anthropic
+
+from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ArticleForSynthesis:
+    source_name: str
+    source_slug: str
+    title: str
+    summary: str
+    url: str
+
+
+@dataclass
+class SourceAnalysis:
+    source_slug: str
+    source_name: str
+    emphasis: str
+    omissions: str
+    coverage_percentage: float
+
+
+@dataclass
+class SynthesisResult:
+    title: str
+    synthesis: str
+    key_facts: List[str]
+    category: str
+    source_analyses: List[SourceAnalysis]
+
+
+SYSTEM_PROMPT = """Sos un periodista neutral y experimentado argentino. Tu misión es analizar la misma noticia
+cubierta por distintos medios argentinos y producir un análisis objetivo e imparcial.
+Nunca tomás partido político. Tu objetivo es mostrar qué dice cada medio y qué omite,
+para que el lector pueda formarse su propia opinión informada."""
+
+USER_PROMPT_TEMPLATE = """Analizá las siguientes notas periodísticas sobre el mismo hecho, publicadas por distintos medios argentinos:
+
+{articles}
+
+Producí un análisis completo en formato JSON con esta estructura exacta:
+{{
+  "title": "Título neutral y descriptivo del hecho (máx 100 caracteres)",
+  "synthesis": "Síntesis neutral del hecho en 300-400 palabras. Solo hechos verificables, sin opinión. En castellano argentino.",
+  "key_facts": ["Hecho clave 1", "Hecho clave 2", "Hecho clave 3", "Hecho clave 4", "Hecho clave 5"],
+  "category": "Una de: Política, Economía, Sociedad, Seguridad, Internacional, Deportes, Cultura, Tecnología, Ambiente",
+  "source_analyses": [
+    {{
+      "source_slug": "slug del medio",
+      "emphasis": "Qué aspectos enfatiza o resalta este medio (1-2 oraciones)",
+      "omissions": "Qué datos relevantes omite o minimiza este medio comparado con los demás (1-2 oraciones). Si no omite nada relevante, escribí 'Sin omisiones destacadas.'"
+    }}
+  ]
+}}
+
+Respondé SOLO con el JSON, sin texto adicional."""
+
+
+def _format_articles(articles: List[ArticleForSynthesis]) -> str:
+    lines = []
+    for i, art in enumerate(articles, 1):
+        lines.append(f"[{i}] {art.source_name.upper()}")
+        lines.append(f"Título: {art.title}")
+        if art.summary:
+            lines.append(f"Resumen: {art.summary}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+async def synthesize_cluster(articles: List[ArticleForSynthesis]) -> Optional[SynthesisResult]:
+    if len(articles) < 2:
+        return None
+
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+    articles_text = _format_articles(articles)
+    user_message = USER_PROMPT_TEMPLATE.format(articles=articles_text)
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        raw = message.content[0].text.strip()
+
+        # Strip markdown code blocks if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+
+        data = json.loads(raw)
+
+        source_analyses = []
+        all_slugs = {a.source_slug: a.source_name for a in articles}
+        n_sources = len(all_slugs)
+
+        for sa_data in data.get("source_analyses", []):
+            slug = sa_data.get("source_slug", "")
+            source_analyses.append(SourceAnalysis(
+                source_slug=slug,
+                source_name=all_slugs.get(slug, slug),
+                emphasis=sa_data.get("emphasis", ""),
+                omissions=sa_data.get("omissions", ""),
+                coverage_percentage=round(100.0 / n_sources, 1),
+            ))
+
+        return SynthesisResult(
+            title=data["title"],
+            synthesis=data["synthesis"],
+            key_facts=data.get("key_facts", []),
+            category=data.get("category", "Política"),
+            source_analyses=source_analyses,
+        )
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parse error in AI synthesis: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"AI synthesis error: {e}")
+        return None
