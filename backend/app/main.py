@@ -65,3 +65,9 @@ async def shutdown():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/wake")
+async def wake():
+    """Keep-alive endpoint for Render free tier — called by cron-job.org every 10 min."""
+    return {"status": "awake"}
