@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
-import { getNews, getStats, getSources } from '@/lib/api'
-import IdeologySpectrum from '@/components/IdeologySpectrum'
+import { getNews, getStats } from '@/lib/api'
 import HeroAnimated from '@/components/HeroAnimated'
 import StatsCounter from '@/components/StatsCounter'
 import BiasSection from '@/components/BiasSection'
@@ -11,15 +10,13 @@ import AnimatedNewsGrid from '@/components/AnimatedNewsGrid'
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
-  const [news, stats, sources] = await Promise.allSettled([
+  const [news, stats] = await Promise.allSettled([
     getNews(1),
     getStats(),
-    getSources(),
   ])
 
   const clusters = news.status === 'fulfilled' ? news.value.slice(0, 6) : []
   const statsData = stats.status === 'fulfilled' ? stats.value : null
-  const sourcesData = sources.status === 'fulfilled' ? sources.value : []
 
   const featuredCluster = clusters[0] ?? null
   const restClusters = clusters.slice(1)
@@ -62,16 +59,6 @@ export default async function HomePage() {
         <AnimatedNewsGrid featured={featuredCluster} rest={restClusters} />
       </section>
 
-      {/* Ideology spectrum */}
-      {sourcesData.length > 0 && (
-        <section className="bg-white border-t border-gray-100">
-          <div className="max-w-6xl mx-auto px-4 py-16">
-            <div className="max-w-lg">
-              <IdeologySpectrum sources={sourcesData} />
-            </div>
-          </div>
-        </section>
-      )}
     </div>
   )
 }

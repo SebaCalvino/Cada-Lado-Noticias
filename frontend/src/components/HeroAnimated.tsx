@@ -39,7 +39,7 @@ export default function HeroAnimated() {
       <div className="relative max-w-6xl mx-auto px-4 w-full pt-5">
         <div className="flex items-center justify-between text-[11px] text-gray-500 font-mono uppercase tracking-widest border-b border-white/10 pb-3">
           <span>Buenos Aires, Argentina</span>
-          <span className="text-gray-600">Síntesis con IA · 8 medios monitoreados</span>
+          <span className="text-gray-600">Síntesis con IA · 12 medios monitoreados</span>
         </div>
       </div>
 
@@ -56,7 +56,7 @@ export default function HeroAnimated() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
           </span>
-          Monitoreo en tiempo real · 8 medios · Argentina
+          Monitoreo en tiempo real · 12 medios · Argentina
         </div>
 
         {/* Headline */}
@@ -75,7 +75,7 @@ export default function HeroAnimated() {
           <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold leading-[0.95] mt-1">
             <span className="text-gray-400">Mirá lo que dice</span>
             <br />
-            <span className="text-white italic">cada lado.</span>
+            <span className="text-amber-400 font-black not-italic uppercase tracking-tight">CADA LADO.</span>
           </h1>
         </div>
 
