@@ -1,11 +1,12 @@
 import { getSources } from '@/lib/api'
+import type { Source } from '@/types'
 import IdeologySpectrum from '@/components/IdeologySpectrum'
 import { ExternalLink } from 'lucide-react'
 
 export const revalidate = 3600
 
 export default async function FuentesPage() {
-  let sources = []
+  let sources: Source[] = []
   try {
     sources = await getSources()
   } catch {}
