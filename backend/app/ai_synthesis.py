@@ -50,7 +50,7 @@ USER_PROMPT_TEMPLATE = """Analizá las siguientes notas periodísticas sobre el 
 Producí un análisis completo en formato JSON con esta estructura exacta:
 {{
   "title": "Título neutral y descriptivo del hecho (máx 100 caracteres)",
-  "synthesis": "Síntesis neutral del hecho en 300-400 palabras. Solo hechos verificables, sin opinión. En castellano argentino.",
+  "synthesis": "Síntesis neutral del hecho redactada como artículo periodístico real, de 500-700 palabras. Comenzá con un párrafo inicial impactante (lead) que responda quién, qué, cuándo, dónde y por qué. Continuá con párrafos separados por dos saltos de línea (\\n\\n) que desarrollen el contexto, las declaraciones relevantes si las hay, y un cierre que explique las consecuencias o estado actual. Solo hechos verificables, sin opinión. En castellano argentino.",
   "key_facts": ["Hecho clave 1", "Hecho clave 2", "Hecho clave 3", "Hecho clave 4", "Hecho clave 5"],
   "category": "Una de: Política, Economía, Sociedad, Seguridad, Internacional, Deportes, Cultura, Tecnología, Ambiente",
   "source_analyses": [

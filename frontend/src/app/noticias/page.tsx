@@ -4,7 +4,7 @@ import NewsCard from '@/components/NewsCard'
 import CategoryBadge from '@/components/CategoryBadge'
 import Link from 'next/link'
 
-export const revalidate = 300
+export const dynamic = 'force-dynamic'
 
 interface Props {
   searchParams: { category?: string; page?: string }

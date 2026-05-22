@@ -4,7 +4,7 @@ import { getNews, getStats, getSources } from '@/lib/api'
 import NewsCard from '@/components/NewsCard'
 import IdeologySpectrum from '@/components/IdeologySpectrum'
 
-export const revalidate = 300
+export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
   const [news, stats, sources] = await Promise.allSettled([
@@ -16,6 +16,9 @@ export default async function HomePage() {
   const clusters = news.status === 'fulfilled' ? news.value.slice(0, 6) : []
   const statsData = stats.status === 'fulfilled' ? stats.value : null
   const sourcesData = sources.status === 'fulfilled' ? sources.value : []
+
+  const featuredCluster = clusters[0] ?? null
+  const restClusters = clusters.slice(1)
 
   return (
     <div>
@@ -119,10 +122,22 @@ export default async function HomePage() {
             </p>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {clusters.map(cluster => (
-              <NewsCard key={cluster.id} cluster={cluster} />
-            ))}
+          <div className="space-y-5">
+            {/* Featured article */}
+            {featuredCluster && (
+              <div className="w-full">
+                <NewsCard cluster={featuredCluster} featured={true} />
+              </div>
+            )}
+
+            {/* Rest in 2-column grid */}
+            {restClusters.length > 0 && (
+              <div className="grid md:grid-cols-2 gap-5">
+                {restClusters.map(cluster => (
+                  <NewsCard key={cluster.id} cluster={cluster} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </section>
