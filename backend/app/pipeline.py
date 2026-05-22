@@ -21,7 +21,7 @@ SOURCES_METADATA = {
     "ambito": {"name": "Ámbito", "url": "https://www.ambito.com", "color": "#FF6B00", "ideology_score": 0.1, "ideology_label": "Centro"},
     "cronista": {"name": "El Cronista", "url": "https://www.cronista.com", "color": "#2C7BB6", "ideology_score": 0.2, "ideology_label": "Centro"},
     "perfil": {"name": "Perfil", "url": "https://www.perfil.com", "color": "#8B0000", "ideology_score": -0.1, "ideology_label": "Centro"},
-    "laizquierda": {"name": "La Izquierda Diario", "url": "https://www.laizquierdadiario.com", "color": "#CC0000", "ideology_score": -1.0, "ideology_label": "Izquierda"},
+    "laizquierda": {"name": "Télam", "url": "https://www.telam.com.ar", "color": "#CC0000", "ideology_score": -0.3, "ideology_label": "Estatal"},
 }
 
 
