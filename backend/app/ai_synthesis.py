@@ -158,24 +158,28 @@ def _call_anthropic(prompt: str) -> str:
     return message.content[0].text
 
 
-async def classify_comments(comments_text: List[str]) -> dict:
+async def classify_comments(comments: list) -> dict:
     """
-    Usa Groq para clasificar comentarios como positivos o negativos sobre el tema.
-    Retorna {"positive": [...], "negative": [...]}
+    Single Groq call. Takes all scraped comments as one array (with text + source_name).
+    Returns {"positive": [indices], "negative": [indices]} — 3 of each max.
     """
-    if not comments_text or settings.AI_PROVIDER not in ("groq", "anthropic"):
+    if not comments or settings.AI_PROVIDER not in ("groq", "anthropic"):
         return {"positive": [], "negative": []}
 
-    numbered = "\n".join(f"{i+1}. {c}" for i, c in enumerate(comments_text[:15]))
-    prompt = f"""Analizá estos comentarios de lectores sobre una noticia y clasificá los 3 más representativos con perspectiva POSITIVA/favorable sobre el tema, y los 3 más representativos con perspectiva CRÍTICA/negativa.
+    numbered = "\n".join(
+        f"{i+1}. [{c.get('source_name','Lector')}] {c.get('text','')}"
+        for i, c in enumerate(comments[:30])
+    )
+    prompt = f"""Tenés estos comentarios de lectores argentinos sobre una misma noticia, provenientes de distintos medios.
 
-Comentarios:
 {numbered}
 
-Respondé SOLO con JSON:
+Seleccioná exactamente 3 comentarios con perspectiva FAVORABLE/positiva sobre el tema y 3 con perspectiva CRÍTICA/negativa. Priorizá los más sustanciales e interesantes (no los más cortos ni los más agresivos). No repitas índices entre positivos y negativos.
+
+Respondé SOLO con JSON válido:
 {{"positive": [1, 2, 3], "negative": [4, 5, 6]}}
 
-Donde los números son los índices de los comentarios (empezando en 1). Si hay menos de 3 de algún tipo, devolvé los que haya."""
+Los números son los índices (empezando en 1). Si hay menos de 3 de algún tipo, devolvé los que haya."""
 
     try:
         if settings.AI_PROVIDER == "groq":

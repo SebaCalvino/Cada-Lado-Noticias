@@ -11,7 +11,7 @@ from app.models import Source, RawArticle, NewsCluster, ClusterArticle, ClusterC
 from app.scrapers import ALL_SCRAPERS
 from app.clustering import ArticleInput, cluster_articles
 from app.ai_synthesis import ArticleForSynthesis, synthesize_cluster, classify_comments
-from app.scrapers.comments import get_lanacion_comments
+from app.scrapers.comments import get_all_cluster_comments
 
 logger = logging.getLogger(__name__)
 
@@ -161,35 +161,37 @@ async def run_scraping_pipeline():
                 ))
                 art.clustered = True
 
-            # Scrape comments for this cluster from La Nación articles
-            lanacion_articles = [id_to_article[aid] for aid in cluster.article_ids
-                                 if aid in id_to_article and id_to_slug[aid] == "lanacion"]
-            if lanacion_articles:
-                all_comments = []
-                for art in lanacion_articles[:2]:  # max 2 articles
-                    comments = await get_lanacion_comments(art.url)
-                    all_comments.extend(comments)
+            # Scrape comments from ALL articles in this cluster in one parallel gather
+            comment_inputs = [
+                {"url": id_to_article[aid].url, "source_slug": id_to_slug[aid], "source_name": id_to_name[aid]}
+                for aid in cluster.article_ids if aid in id_to_article
+            ]
+            all_comments = await get_all_cluster_comments(comment_inputs)
 
-                if all_comments:
-                    texts = [c.text for c in all_comments]
-                    classification = await classify_comments(texts)
+            if all_comments:
+                # Single Groq call to classify all comments at once
+                comments_payload = [{"text": c.text, "source_name": c.source_name} for c in all_comments]
+                classification = await classify_comments(comments_payload)
 
-                    saved = set()
-                    for sentiment, indices in [("positive", classification.get("positive", [])),
-                                               ("negative", classification.get("negative", []))]:
-                        for idx in indices[:3]:
+                saved = set()
+                for sentiment, indices in [("positive", classification.get("positive", [])),
+                                            ("negative", classification.get("negative", []))]:
+                    for idx in indices[:3]:
+                        try:
                             idx = int(idx) - 1
-                            if 0 <= idx < len(all_comments) and idx not in saved:
-                                saved.add(idx)
-                                c = all_comments[idx]
-                                db.add(ClusterComment(
-                                    cluster_id=news_cluster.id,
-                                    source_slug="lanacion",
-                                    author=c.author,
-                                    text=c.text,
-                                    sentiment=sentiment,
-                                    votes=c.votes,
-                                ))
+                        except (ValueError, TypeError):
+                            continue
+                        if 0 <= idx < len(all_comments) and idx not in saved:
+                            saved.add(idx)
+                            c = all_comments[idx]
+                            db.add(ClusterComment(
+                                cluster_id=news_cluster.id,
+                                source_slug=c.source_slug,
+                                author=c.author,
+                                text=c.text,
+                                sentiment=sentiment,
+                                votes=c.votes,
+                            ))
 
         await db.commit()
 
