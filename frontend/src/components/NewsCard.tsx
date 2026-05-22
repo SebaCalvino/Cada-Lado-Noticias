@@ -28,8 +28,16 @@ export default function NewsCard({ cluster, featured = false }: Props) {
     <Link href={`/noticias/${cluster.id}`} className="block group">
       <article
         className="bg-white rounded-xl border border-gray-200 h-full flex flex-col gap-3 overflow-hidden hover:border-gray-300 hover:shadow-md transition-all"
-        style={{ borderLeftColor: borderColor, borderLeftWidth: '4px' }}
+        style={cluster.image_url ? undefined : { borderLeftColor: borderColor, borderLeftWidth: '4px' }}
       >
+        {cluster.image_url && (
+          <img
+            src={cluster.image_url}
+            alt=""
+            className="w-full h-40 object-cover rounded-t-xl"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+          />
+        )}
         <div className={`px-5 ${featured ? 'pt-6' : 'pt-5'} flex items-start justify-between gap-3`}>
           {cluster.category && (
             <span

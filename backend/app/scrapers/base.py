@@ -24,6 +24,7 @@ class ArticleData:
     summary: str = ""
     published_at: Optional[datetime] = None
     category: str = ""
+    image_url: str = ""
 
 
 class BaseNewsScraper(ABC):
@@ -61,12 +62,39 @@ class BaseNewsScraper(ABC):
                 except Exception:
                     pass
 
+            # Extract image URL with priority order
+            image_url = ""
+            try:
+                if hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
+                    candidate = entry.media_thumbnail[0].get("url", "")
+                    if candidate.startswith("http"):
+                        image_url = candidate
+            except Exception:
+                pass
+            if not image_url:
+                try:
+                    if hasattr(entry, "media_content") and entry.media_content:
+                        candidate = entry.media_content[0].get("url", "")
+                        if candidate.startswith("http"):
+                            image_url = candidate
+                except Exception:
+                    pass
+            if not image_url:
+                try:
+                    if hasattr(entry, "enclosures") and entry.enclosures:
+                        href = entry.enclosures[0].get("href", "")
+                        if href.startswith("http") and any(href.lower().endswith(ext) for ext in (".jpg", ".png", ".webp", ".jpeg")):
+                            image_url = href
+                except Exception:
+                    pass
+
             articles.append(ArticleData(
                 title=title,
                 url=url,
                 source_slug=self.source_slug,
                 summary=summary,
                 published_at=published_at,
+                image_url=image_url,
             ))
 
         return articles

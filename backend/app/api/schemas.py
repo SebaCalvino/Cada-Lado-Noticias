@@ -31,6 +31,18 @@ class ClusterArticleSchema(BaseModel):
         from_attributes = True
 
 
+class ClusterCommentSchema(BaseModel):
+    id: int
+    author: Optional[str]
+    text: str
+    sentiment: Optional[str]
+    votes: int
+    source_slug: str
+
+    class Config:
+        from_attributes = True
+
+
 class NewsClusterListSchema(BaseModel):
     id: int
     title: str
@@ -39,6 +51,7 @@ class NewsClusterListSchema(BaseModel):
     source_count: int
     published_at: Optional[datetime]
     sources: List[str]  # list of source slugs
+    image_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -53,6 +66,8 @@ class NewsClusterDetailSchema(BaseModel):
     source_count: int
     published_at: Optional[datetime]
     articles: List[ClusterArticleSchema]
+    image_url: Optional[str] = None
+    comments: List[ClusterCommentSchema] = []
 
     class Config:
         from_attributes = True

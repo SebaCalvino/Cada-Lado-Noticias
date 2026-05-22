@@ -28,6 +28,16 @@ export interface NewsCluster {
   source_count: number
   published_at: string | null
   sources: string[]
+  image_url?: string | null
+}
+
+export interface ClusterComment {
+  id: number
+  author: string | null
+  text: string
+  sentiment: string | null
+  votes: number
+  source_slug: string
 }
 
 export interface NewsClusterDetail {
@@ -39,6 +49,8 @@ export interface NewsClusterDetail {
   source_count: number
   published_at: string | null
   articles: ClusterArticle[]
+  image_url?: string | null
+  comments?: ClusterComment[]
 }
 
 export interface Stats {

@@ -2,9 +2,10 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.config import settings
-from app.database import init_db
+from app.database import init_db, engine
 from app.api.routes import router
 from app.scheduler import create_scheduler
 from app.pipeline import ensure_sources
@@ -36,6 +37,19 @@ scheduler = create_scheduler()
 async def startup():
     logger.info("Initializing database...")
     await init_db()
+    async with engine.begin() as conn:
+        await conn.execute(text("ALTER TABLE raw_articles ADD COLUMN IF NOT EXISTS image_url TEXT"))
+        await conn.execute(text("ALTER TABLE news_clusters ADD COLUMN IF NOT EXISTS image_url TEXT"))
+        await conn.execute(text("""CREATE TABLE IF NOT EXISTS cluster_comments (
+            id SERIAL PRIMARY KEY,
+            cluster_id INTEGER REFERENCES news_clusters(id) ON DELETE CASCADE,
+            source_slug VARCHAR(50) DEFAULT 'lanacion',
+            author VARCHAR(200),
+            text TEXT NOT NULL,
+            sentiment VARCHAR(20),
+            votes INTEGER DEFAULT 0,
+            scraped_at TIMESTAMP DEFAULT NOW()
+        )"""))
     async with AsyncSessionLocal() as db:
         await ensure_sources(db)
     scheduler.start()

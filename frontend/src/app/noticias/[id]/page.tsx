@@ -4,6 +4,7 @@ import { ArrowLeft, Clock, Layers, BookOpen } from 'lucide-react'
 import { getNewsDetail, getNews } from '@/lib/api'
 import { timeAgo } from '@/lib/utils'
 import CoverageBar from '@/components/CoverageBar'
+import CommentsSection from '@/components/CommentsSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,16 +80,33 @@ export default async function NoticiaDetailPage({ params }: Props) {
       </div>
 
       {/* Hero section */}
-      <section className={`bg-gradient-to-br ${heroGradient} text-white mt-4`}>
-        <div className="max-w-6xl mx-auto px-4 py-12 md:py-16">
-          <span className={`inline-block ${badgeColor} text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-4`}>
-            {cluster.category ?? 'General'}
-          </span>
-          <h1 className="text-3xl md:text-5xl font-serif font-bold leading-tight max-w-4xl">
-            {cluster.title}
-          </h1>
-        </div>
-      </section>
+      {cluster.image_url ? (
+        <section
+          className="relative text-white mt-4 bg-cover bg-center"
+          style={{ backgroundImage: `url(${cluster.image_url})` }}
+        >
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative max-w-6xl mx-auto px-4 py-12 md:py-16">
+            <span className={`inline-block ${badgeColor} text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-4`}>
+              {cluster.category ?? 'General'}
+            </span>
+            <h1 className="text-3xl md:text-5xl font-serif font-bold leading-tight max-w-4xl">
+              {cluster.title}
+            </h1>
+          </div>
+        </section>
+      ) : (
+        <section className={`bg-gradient-to-br ${heroGradient} text-white mt-4`}>
+          <div className="max-w-6xl mx-auto px-4 py-12 md:py-16">
+            <span className={`inline-block ${badgeColor} text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-4`}>
+              {cluster.category ?? 'General'}
+            </span>
+            <h1 className="text-3xl md:text-5xl font-serif font-bold leading-tight max-w-4xl">
+              {cluster.title}
+            </h1>
+          </div>
+        </section>
+      )}
 
       {/* Metadata bar */}
       <div className="bg-white border-b border-gray-200">
@@ -158,6 +176,11 @@ export default async function NoticiaDetailPage({ params }: Props) {
                   ))}
                 </div>
               </section>
+            )}
+
+            {/* Comments section */}
+            {cluster.comments && cluster.comments.length > 0 && (
+              <CommentsSection comments={cluster.comments} />
             )}
           </main>
 

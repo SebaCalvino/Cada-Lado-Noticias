@@ -35,6 +35,7 @@ class RawArticle(Base):
     published_at = Column(DateTime)
     scraped_at = Column(DateTime, default=datetime.utcnow)
     category = Column(String(100))
+    image_url = Column(Text, nullable=True)
     clustered = Column(Boolean, default=False)
 
     source = relationship("Source", back_populates="articles")
@@ -52,9 +53,11 @@ class NewsCluster(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     published_at = Column(DateTime)
     source_count = Column(Integer, default=0)
+    image_url = Column(Text, nullable=True)
     featured = Column(Boolean, default=False)
 
     articles = relationship("ClusterArticle", back_populates="cluster")
+    comments = relationship("ClusterComment", back_populates="cluster", cascade="all, delete-orphan")
 
 
 class ClusterArticle(Base):
@@ -71,3 +74,18 @@ class ClusterArticle(Base):
 
     cluster = relationship("NewsCluster", back_populates="articles")
     article = relationship("RawArticle", back_populates="cluster_memberships")
+
+
+class ClusterComment(Base):
+    __tablename__ = "cluster_comments"
+
+    id = Column(Integer, primary_key=True)
+    cluster_id = Column(Integer, ForeignKey("news_clusters.id"), nullable=False)
+    source_slug = Column(String(50), default="lanacion")
+    author = Column(String(200))
+    text = Column(Text, nullable=False)
+    sentiment = Column(String(20))  # "positive" o "negative"
+    votes = Column(Integer, default=0)
+    scraped_at = Column(DateTime, default=datetime.utcnow)
+
+    cluster = relationship("NewsCluster", back_populates="comments")

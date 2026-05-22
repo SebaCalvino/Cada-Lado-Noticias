@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Source, RawArticle, NewsCluster, ClusterArticle
+from app.models import Source, RawArticle, NewsCluster, ClusterArticle, ClusterComment
 from app.api.schemas import (
     SourceSchema, NewsClusterListSchema, NewsClusterDetailSchema,
-    ClusterArticleSchema, StatsSchema, ScrapeResponseSchema
+    ClusterArticleSchema, ClusterCommentSchema, StatsSchema, ScrapeResponseSchema
 )
 from app.pipeline import run_scraping_pipeline
 
@@ -60,6 +60,7 @@ async def list_news(
             source_count=cluster.source_count,
             published_at=cluster.published_at,
             sources=sources,
+            image_url=cluster.image_url,
         ))
     return out
 
@@ -71,7 +72,8 @@ async def get_news_detail(cluster_id: int, db: AsyncSession = Depends(get_db)):
         .options(
             selectinload(NewsCluster.articles)
             .selectinload(ClusterArticle.article)
-            .selectinload(RawArticle.source)
+            .selectinload(RawArticle.source),
+            selectinload(NewsCluster.comments),
         )
         .where(NewsCluster.id == cluster_id)
     )
@@ -104,6 +106,8 @@ async def get_news_detail(cluster_id: int, db: AsyncSession = Depends(get_db)):
         source_count=cluster.source_count,
         published_at=cluster.published_at,
         articles=articles,
+        image_url=cluster.image_url,
+        comments=[ClusterCommentSchema.model_validate(c) for c in cluster.comments],
     )
 
 

@@ -7,10 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
-from app.models import Source, RawArticle, NewsCluster, ClusterArticle
+from app.models import Source, RawArticle, NewsCluster, ClusterArticle, ClusterComment
 from app.scrapers import ALL_SCRAPERS
 from app.clustering import ArticleInput, cluster_articles
-from app.ai_synthesis import ArticleForSynthesis, synthesize_cluster
+from app.ai_synthesis import ArticleForSynthesis, synthesize_cluster, classify_comments
+from app.scrapers.comments import get_lanacion_comments
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ async def run_scraping_pipeline():
                     summary=art_data.summary,
                     published_at=art_data.published_at or datetime.utcnow(),
                     scraped_at=datetime.utcnow(),
+                    image_url=art_data.image_url or None,
                 )
                 db.add(article)
                 new_count += 1
@@ -125,6 +127,8 @@ async def run_scraping_pipeline():
             if not synthesis:
                 continue
 
+            image_url = next((id_to_article[aid].image_url for aid in cluster.article_ids if aid in id_to_article and id_to_article[aid].image_url), None)
+
             news_cluster = NewsCluster(
                 title=synthesis.title,
                 synthesis=synthesis.synthesis,
@@ -132,6 +136,7 @@ async def run_scraping_pipeline():
                 category=synthesis.category,
                 published_at=datetime.utcnow(),
                 source_count=len(set(cluster.source_slugs)),
+                image_url=image_url,
             )
             db.add(news_cluster)
             await db.flush()
@@ -155,6 +160,36 @@ async def run_scraping_pipeline():
                     similarity_score=cluster.similarity_scores.get(art_id, 0.0),
                 ))
                 art.clustered = True
+
+            # Scrape comments for this cluster from La Nación articles
+            lanacion_articles = [id_to_article[aid] for aid in cluster.article_ids
+                                 if aid in id_to_article and id_to_slug[aid] == "lanacion"]
+            if lanacion_articles:
+                all_comments = []
+                for art in lanacion_articles[:2]:  # max 2 articles
+                    comments = await get_lanacion_comments(art.url)
+                    all_comments.extend(comments)
+
+                if all_comments:
+                    texts = [c.text for c in all_comments]
+                    classification = await classify_comments(texts)
+
+                    saved = set()
+                    for sentiment, indices in [("positive", classification.get("positive", [])),
+                                               ("negative", classification.get("negative", []))]:
+                        for idx in indices[:3]:
+                            idx = int(idx) - 1
+                            if 0 <= idx < len(all_comments) and idx not in saved:
+                                saved.add(idx)
+                                c = all_comments[idx]
+                                db.add(ClusterComment(
+                                    cluster_id=news_cluster.id,
+                                    source_slug="lanacion",
+                                    author=c.author,
+                                    text=c.text,
+                                    sentiment=sentiment,
+                                    votes=c.votes,
+                                ))
 
         await db.commit()
 
