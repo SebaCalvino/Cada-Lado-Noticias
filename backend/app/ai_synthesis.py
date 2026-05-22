@@ -1,8 +1,9 @@
 import json
 import logging
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import List, Optional
 
+import httpx
 import anthropic
 
 from app.config import settings
@@ -61,7 +62,7 @@ Producí un análisis completo en formato JSON con esta estructura exacta:
   ]
 }}
 
-Respondé SOLO con el JSON, sin texto adicional."""
+Respondé SOLO con el JSON, sin texto adicional ni bloques de código."""
 
 
 def _format_articles(articles: List[ArticleForSynthesis]) -> str:
@@ -75,58 +76,87 @@ def _format_articles(articles: List[ArticleForSynthesis]) -> str:
     return "\n".join(lines)
 
 
+def _parse_response(raw: str, articles: List[ArticleForSynthesis]) -> Optional[SynthesisResult]:
+    raw = raw.strip()
+    # Strip markdown code blocks if model wraps in them
+    if raw.startswith("```"):
+        parts = raw.split("```")
+        raw = parts[1] if len(parts) > 1 else raw
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    data = json.loads(raw)
+
+    all_slugs = {a.source_slug: a.source_name for a in articles}
+    n_sources = len(all_slugs)
+
+    source_analyses = []
+    for sa_data in data.get("source_analyses", []):
+        slug = sa_data.get("source_slug", "")
+        source_analyses.append(SourceAnalysis(
+            source_slug=slug,
+            source_name=all_slugs.get(slug, slug),
+            emphasis=sa_data.get("emphasis", ""),
+            omissions=sa_data.get("omissions", ""),
+            coverage_percentage=round(100.0 / n_sources, 1),
+        ))
+
+    return SynthesisResult(
+        title=data["title"],
+        synthesis=data["synthesis"],
+        key_facts=data.get("key_facts", []),
+        category=data.get("category", "Política"),
+        source_analyses=source_analyses,
+    )
+
+
+async def _call_ollama(prompt: str) -> str:
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(
+            f"{settings.OLLAMA_URL}/api/chat",
+            json={
+                "model": settings.OLLAMA_MODEL,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+                "options": {"temperature": 0.3},
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["message"]["content"]
+
+
+def _call_anthropic(prompt: str) -> str:
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=2048,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return message.content[0].text
+
+
 async def synthesize_cluster(articles: List[ArticleForSynthesis]) -> Optional[SynthesisResult]:
     if len(articles) < 2:
         return None
 
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-
-    articles_text = _format_articles(articles)
-    user_message = USER_PROMPT_TEMPLATE.format(articles=articles_text)
+    prompt = USER_PROMPT_TEMPLATE.format(articles=_format_articles(articles))
 
     try:
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2048,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}],
-        )
-        raw = message.content[0].text.strip()
+        if settings.AI_PROVIDER == "ollama":
+            raw = await _call_ollama(prompt)
+        else:
+            raw = _call_anthropic(prompt)
 
-        # Strip markdown code blocks if present
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        raw = raw.strip()
-
-        data = json.loads(raw)
-
-        source_analyses = []
-        all_slugs = {a.source_slug: a.source_name for a in articles}
-        n_sources = len(all_slugs)
-
-        for sa_data in data.get("source_analyses", []):
-            slug = sa_data.get("source_slug", "")
-            source_analyses.append(SourceAnalysis(
-                source_slug=slug,
-                source_name=all_slugs.get(slug, slug),
-                emphasis=sa_data.get("emphasis", ""),
-                omissions=sa_data.get("omissions", ""),
-                coverage_percentage=round(100.0 / n_sources, 1),
-            ))
-
-        return SynthesisResult(
-            title=data["title"],
-            synthesis=data["synthesis"],
-            key_facts=data.get("key_facts", []),
-            category=data.get("category", "Política"),
-            source_analyses=source_analyses,
-        )
+        return _parse_response(raw, articles)
 
     except json.JSONDecodeError as e:
         logger.error(f"JSON parse error in AI synthesis: {e}")
         return None
     except Exception as e:
-        logger.error(f"AI synthesis error: {e}")
+        logger.error(f"AI synthesis error ({settings.AI_PROVIDER}): {e}")
         return None
