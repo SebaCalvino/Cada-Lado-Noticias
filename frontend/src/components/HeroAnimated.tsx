@@ -75,7 +75,7 @@ export default function HeroAnimated() {
           <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold leading-[0.95] mt-1">
             <span className="text-gray-400">Mirá lo que dice</span>
             <br />
-            <span className="text-amber-400 font-black not-italic uppercase tracking-tight">CADA LADO.</span>
+            <span className="text-cada-blue-bright font-black not-italic uppercase tracking-tight">CADA LADO.</span>
           </h1>
         </div>
 
@@ -94,7 +94,7 @@ export default function HeroAnimated() {
           <div className="flex flex-wrap gap-3">
             <Link
               href="/noticias"
-              className="bg-white text-gray-900 font-bold px-7 py-3.5 flex items-center gap-2 hover:bg-gray-100 transition-colors text-sm tracking-wide uppercase"
+              className="bg-cada-blue text-white font-bold px-7 py-3.5 flex items-center gap-2 hover:bg-cada-blue-bright transition-colors text-sm tracking-wide uppercase"
             >
               Ver las noticias de hoy <ArrowRight size={15} />
             </Link>

@@ -40,14 +40,24 @@ export default async function Footer() {
 
           {/* Brand column */}
           <div className="md:col-span-1">
-            <Link href="/" className="inline-block mb-5">
-              <Image
-                src="/CadaLadoLogoCompleto.svg"
-                alt="Cada Lado Noticias"
-                width={160}
-                height={40}
-                className="object-contain h-9 w-auto opacity-90 hover:opacity-100 transition-opacity brightness-0 invert"
-              />
+            <Link href="/" className="flex items-center gap-3 mb-5">
+              <div className="bg-white rounded-full p-0.5">
+                <Image
+                  src="/images/logo-cl.svg"
+                  alt="Cada Lado"
+                  width={44}
+                  height={44}
+                  className="object-contain w-11 h-11"
+                />
+              </div>
+              <div className="flex flex-col leading-none">
+                <span className="font-serif font-bold text-white text-xl tracking-tight">
+                  CADA LADO
+                </span>
+                <span className="text-gray-400 text-[9px] font-bold tracking-[0.34em] uppercase mt-0.5">
+                  Noticias
+                </span>
+              </div>
             </Link>
             <p className="text-sm text-gray-400 leading-relaxed mb-6">
               La misma noticia, todas las voces. Sin que te vendan humo.

@@ -25,8 +25,8 @@ export const metadata: Metadata = {
   description:
     'Compará cómo cada diario argentino cubre la misma noticia. Síntesis neutral + análisis de qué dice y qué omite cada medio.',
   icons: {
-    icon: '/CadaLadoLogoCL.svg',
-    apple: '/CadaLadoLogoCL.svg',
+    icon: '/images/logo-cl.svg',
+    apple: '/images/logo-cl.svg',
   },
   openGraph: {
     title: 'Cada Lado Noticias',

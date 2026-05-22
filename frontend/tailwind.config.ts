@@ -11,6 +11,7 @@ const config: Config = {
       colors: {
         // Paleta oficial Cada Lado
         'cada-blue': '#0052CC',
+        'cada-blue-bright': '#3D85FF',
         'cada-dark': '#0F172A',
         'cada-light': '#F8FAFC',
         // Paleta brand legacy (mantener para compatibilidad)
