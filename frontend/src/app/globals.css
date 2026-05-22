@@ -4,8 +4,11 @@
 
 @layer base {
   :root {
-    --font-dm-sans: 'DM Sans', system-ui, sans-serif;
-    --font-playfair: 'Playfair Display', Georgia, serif;
+    --font-serif-heading: 'Roboto Slab', Georgia, serif;
+    --font-sans-body: 'Inter', system-ui, sans-serif;
+    --cada-blue: #0052CC;
+    --cada-dark: #0F172A;
+    --cada-light: #F8FAFC;
   }
 
   html {
@@ -13,21 +16,22 @@
   }
 
   body {
-    @apply bg-white text-gray-900 antialiased;
+    @apply bg-white text-cada-dark antialiased;
+    font-family: var(--font-sans-body);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-serif-heading);
   }
 
   ::selection {
-    background-color: #3B5BDB;
+    background-color: #0052CC;
     color: white;
   }
 
   *:focus-visible {
-    outline: 2px solid #3B5BDB;
+    outline: 2px solid #0052CC;
     outline-offset: 2px;
-  }
-
-  h1, h2, h3 {
-    @apply font-serif;
   }
 }
 

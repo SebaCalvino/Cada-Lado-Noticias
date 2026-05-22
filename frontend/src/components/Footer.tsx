@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Instagram, Facebook, Twitter, Youtube, Send } from 'lucide-react'
 import { getNews } from '@/lib/api'
 
@@ -32,18 +33,21 @@ export default async function Footer() {
   ]
 
   return (
-    <footer className="bg-[#0d1b2a] text-gray-300">
+    <footer className="bg-cada-dark text-gray-300">
       {/* Main footer */}
       <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
 
           {/* Brand column */}
           <div className="md:col-span-1">
-            <Link href="/" className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-[#0f172a] border border-white/20 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">CL</span>
-              </div>
-              <span className="text-white font-black text-base tracking-widest uppercase">CADA LADO</span>
+            <Link href="/" className="inline-block mb-5">
+              <Image
+                src="/CadaLadoLogoCompleto.png"
+                alt="Cada Lado Noticias"
+                width={160}
+                height={40}
+                className="object-contain h-9 w-auto opacity-90 hover:opacity-100 transition-opacity brightness-0 invert"
+              />
             </Link>
             <p className="text-sm text-gray-400 leading-relaxed mb-6">
               La misma noticia, todas las voces. Sin que te vendan humo.
