@@ -1,9 +1,10 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
 from app.models import Source, RawArticle, NewsCluster, ClusterArticle
@@ -14,14 +15,14 @@ from app.ai_synthesis import ArticleForSynthesis, synthesize_cluster
 logger = logging.getLogger(__name__)
 
 SOURCES_METADATA = {
-    "clarin": {"name": "Clarín", "url": "https://www.clarin.com", "color": "#004B87", "ideology_score": 0.3, "ideology_label": "Centro-derecha"},
-    "lanacion": {"name": "La Nación", "url": "https://www.lanacion.com.ar", "color": "#1A3A5C", "ideology_score": 0.6, "ideology_label": "Centro-derecha"},
-    "infobae": {"name": "Infobae", "url": "https://www.infobae.com", "color": "#E30613", "ideology_score": 0.2, "ideology_label": "Centro"},
-    "pagina12": {"name": "Página 12", "url": "https://www.pagina12.com.ar", "color": "#1A1A1A", "ideology_score": -0.7, "ideology_label": "Izquierda"},
-    "ambito": {"name": "Ámbito", "url": "https://www.ambito.com", "color": "#FF6B00", "ideology_score": 0.1, "ideology_label": "Centro"},
-    "cronista": {"name": "El Cronista", "url": "https://www.cronista.com", "color": "#2C7BB6", "ideology_score": 0.2, "ideology_label": "Centro"},
-    "perfil": {"name": "Perfil", "url": "https://www.perfil.com", "color": "#8B0000", "ideology_score": -0.1, "ideology_label": "Centro"},
-    "laizquierda": {"name": "Télam", "url": "https://www.telam.com.ar", "color": "#CC0000", "ideology_score": -0.3, "ideology_label": "Estatal"},
+    "clarin":     {"name": "Clarín",      "url": "https://www.clarin.com",         "color": "#004B87", "ideology_score":  0.3, "ideology_label": "Centro-derecha"},
+    "lanacion":   {"name": "La Nación",   "url": "https://www.lanacion.com.ar",    "color": "#1A3A5C", "ideology_score":  0.6, "ideology_label": "Centro-derecha"},
+    "infobae":    {"name": "Infobae",     "url": "https://www.infobae.com",        "color": "#E30613", "ideology_score":  0.2, "ideology_label": "Centro"},
+    "pagina12":   {"name": "Página 12",   "url": "https://www.pagina12.com.ar",   "color": "#1A1A1A", "ideology_score": -0.7, "ideology_label": "Izquierda"},
+    "ambito":     {"name": "Ámbito",      "url": "https://www.ambito.com",         "color": "#FF6B00", "ideology_score":  0.1, "ideology_label": "Centro"},
+    "cronista":   {"name": "El Cronista", "url": "https://www.cronista.com",       "color": "#2C7BB6", "ideology_score":  0.2, "ideology_label": "Centro"},
+    "perfil":     {"name": "Perfil",      "url": "https://www.perfil.com",         "color": "#8B0000", "ideology_score": -0.1, "ideology_label": "Centro"},
+    "laizquierda":{"name": "Télam",       "url": "https://www.telam.com.ar",       "color": "#CC0000", "ideology_score": -0.3, "ideology_label": "Estatal"},
 }
 
 
@@ -43,26 +44,24 @@ async def run_scraping_pipeline():
         result = await db.execute(select(Source).where(Source.active == True))
         sources = {s.slug: s for s in result.scalars().all()}
 
-        all_new_articles = []
+        # --- Scrape new articles ---
         scrape_tasks = [scraper.get_articles() for scraper in ALL_SCRAPERS]
         results = await asyncio.gather(*scrape_tasks, return_exceptions=True)
 
+        new_count = 0
         for scraper, articles in zip(ALL_SCRAPERS, results):
             if isinstance(articles, Exception):
                 logger.error(f"[{scraper.source_slug}] Scraper failed: {articles}")
                 continue
-
             source = sources.get(scraper.source_slug)
             if not source:
                 continue
-
             for art_data in articles:
                 existing = await db.execute(
                     select(RawArticle).where(RawArticle.url == art_data.url)
                 )
                 if existing.scalar_one_or_none():
                     continue
-
                 article = RawArticle(
                     source_id=source.id,
                     title=art_data.title,
@@ -72,50 +71,55 @@ async def run_scraping_pipeline():
                     scraped_at=datetime.utcnow(),
                 )
                 db.add(article)
-                all_new_articles.append((article, source.slug, source.name))
+                new_count += 1
 
         await db.commit()
-        logger.info(f"Scraped {len(all_new_articles)} new articles")
+        logger.info(f"Scraped {new_count} new articles")
 
-        # Refresh articles with IDs
-        await db.flush()
-        for art, *_ in all_new_articles:
-            await db.refresh(art)
+        # --- Cluster ALL unclustered articles from the last 24h ---
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+        recent_result = await db.execute(
+            select(RawArticle)
+            .options(selectinload(RawArticle.source))
+            .where(RawArticle.scraped_at >= cutoff)
+            .where(RawArticle.clustered == False)
+        )
+        recent_articles = recent_result.scalars().all()
+        logger.info(f"Unclustered articles in last 24h: {len(recent_articles)}")
 
-        if len(all_new_articles) < 2:
-            logger.info("Not enough articles to cluster")
+        if len(recent_articles) < 2:
+            logger.info("Not enough unclustered articles to cluster")
             return
 
-        # Cluster
+        id_to_article = {a.id: a for a in recent_articles}
+        id_to_slug = {a.id: a.source.slug for a in recent_articles}
+        id_to_name = {a.id: a.source.name for a in recent_articles}
+
         inputs = [
             ArticleInput(
-                id=art.id,
-                title=art.title,
-                summary=art.summary or "",
-                source_slug=slug,
+                id=a.id,
+                title=a.title,
+                summary=a.summary or "",
+                source_slug=a.source.slug,
             )
-            for art, slug, _ in all_new_articles
+            for a in recent_articles
         ]
 
         clusters = cluster_articles(inputs)
-        logger.info(f"Found {len(clusters)} clusters")
-
-        slug_to_name = {slug: name for _, slug, name in all_new_articles}
-        id_to_data = {art.id: (art, slug, name) for art, slug, name in all_new_articles}
+        logger.info(f"Found {len(clusters)} clusters from {len(recent_articles)} articles")
 
         for cluster in clusters:
-            arts_for_synthesis = []
-            for art_id in cluster.article_ids:
-                if art_id not in id_to_data:
-                    continue
-                art, slug, name = id_to_data[art_id]
-                arts_for_synthesis.append(ArticleForSynthesis(
-                    source_name=slug_to_name.get(slug, slug),
-                    source_slug=slug,
-                    title=art.title,
-                    summary=art.summary or "",
-                    url=art.url,
-                ))
+            arts_for_synthesis = [
+                ArticleForSynthesis(
+                    source_name=id_to_name[aid],
+                    source_slug=id_to_slug[aid],
+                    title=id_to_article[aid].title,
+                    summary=id_to_article[aid].summary or "",
+                    url=id_to_article[aid].url,
+                )
+                for aid in cluster.article_ids
+                if aid in id_to_article
+            ]
 
             synthesis = await synthesize_cluster(arts_for_synthesis)
             if not synthesis:
@@ -136,20 +140,20 @@ async def run_scraping_pipeline():
             sa_by_slug = {sa.source_slug: sa for sa in synthesis.source_analyses}
 
             for art_id in cluster.article_ids:
-                if art_id not in id_to_data:
+                if art_id not in id_to_article:
                     continue
-                art, slug, _ = id_to_data[art_id]
+                art = id_to_article[art_id]
+                slug = id_to_slug[art_id]
                 sa = sa_by_slug.get(slug)
 
-                ca = ClusterArticle(
+                db.add(ClusterArticle(
                     cluster_id=news_cluster.id,
                     article_id=art.id,
                     coverage_percentage=sa.coverage_percentage if sa else 0.0,
                     emphasis=sa.emphasis if sa else "",
                     omissions=sa.omissions if sa else "",
                     similarity_score=cluster.similarity_scores.get(art_id, 0.0),
-                )
-                db.add(ca)
+                ))
                 art.clustered = True
 
         await db.commit()
