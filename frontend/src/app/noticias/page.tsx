@@ -1,5 +1,6 @@
 import { getNews, getCategories } from '@/lib/api'
 import NewsCard from '@/components/NewsCard'
+import TrendingTopics from '@/components/TrendingTopics'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +44,8 @@ export default async function NoticiasPage({ searchParams }: Props) {
   const today = formatDate(new Date())
 
   return (
+    <div>
+      <TrendingTopics />
     <div className="max-w-6xl mx-auto px-4 pt-8 pb-16">
 
       {/* Page header */}
@@ -141,6 +144,7 @@ export default async function NoticiasPage({ searchParams }: Props) {
           </div>
         </>
       )}
+    </div>
     </div>
   )
 }

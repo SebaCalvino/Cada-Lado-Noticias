@@ -25,3 +25,6 @@ export const getTweets = (clusterId: number) =>
 
 export const triggerScrape = () =>
   api.post('/scrape').then(r => r.data)
+
+export const getTrendingTopics = () =>
+  api.get<{topic: string; count: number; category: boolean}[]>('/trending-topics').then(r => r.data)

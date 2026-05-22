@@ -43,20 +43,21 @@ function estimateReadingTime(text: string | null): number {
   return Math.max(1, Math.ceil(text.trim().split(/\s+/).length / 200))
 }
 
-// Bold numbers, percentages, and monetary values inline
-function HighlightNumbers({ text }: { text: string }) {
-  const parts = text.split(/((?:\$\s?)?\d[\d.,]*(?:\s*(?:%|millones?|mil millones?|trillones?|bn|bn\.?))?)/gi)
+// Bold numbers, quoted phrases, and key terms inline
+function HighlightText({ text }: { text: string }) {
+  // Split on: numbers/currencies, quoted text (with Spanish quotes too)
+  const parts = text.split(/((?:\$\s?)?\d[\d.,]*(?:\s*(?:%|millones?|mil millones?|trillones?|bn\.?))?|"[^"]{5,80}"|«[^»]{5,80}»)/gi)
   return (
     <>
-      {parts.map((part, i) =>
-        /^[\d$]/.test(part) ? (
-          <strong key={i} className="font-semibold text-gray-900 tabular-nums">
-            {part}
-          </strong>
-        ) : (
-          <Fragment key={i}>{part}</Fragment>
-        )
-      )}
+      {parts.map((part, i) => {
+        if (/^[\d$]/.test(part)) {
+          return <strong key={i} className="font-semibold text-gray-900 tabular-nums">{part}</strong>
+        }
+        if (/^["«]/.test(part)) {
+          return <strong key={i} className="font-semibold text-gray-800">{part}</strong>
+        }
+        return <Fragment key={i}>{part}</Fragment>
+      })}
     </>
   )
 }
@@ -182,8 +183,22 @@ export default async function NoticiaDetailPage({ params }: Props) {
                   {paragraphs.map((para, i) => {
                     const trimmed = para.trim()
                     const showPullQuote = i === 2 && pullQuote
+                    const showInlineImage = i === 1 && cluster.image_url
                     return (
                       <Fragment key={i}>
+                        {/* Inline image after 2nd paragraph — TN style */}
+                        {showInlineImage && (
+                          <figure className="my-6 -mx-2 sm:mx-0">
+                            <img
+                              src={cluster.image_url!}
+                              alt={cluster.title}
+                              className="w-full rounded-lg object-cover max-h-72"
+                            />
+                            <figcaption className="text-xs text-gray-400 mt-2 text-center italic">
+                              {cluster.title}
+                            </figcaption>
+                          </figure>
+                        )}
                         {/* Pull quote after 3rd paragraph */}
                         {showPullQuote && (
                           <blockquote className="my-7 pl-5 border-l-4 border-brand-500">
@@ -195,14 +210,12 @@ export default async function NoticiaDetailPage({ params }: Props) {
                         <p
                           className={
                             i === 0
-                              ? // Lead paragraph: larger serif with drop cap
-                                'text-xl md:text-2xl font-serif font-medium text-gray-900 leading-relaxed mb-6 first-letter:text-[4.5rem] first-letter:font-serif first-letter:font-bold first-letter:float-left first-letter:leading-[0.8] first-letter:mr-2 first-letter:mt-1'
+                              ? 'text-xl md:text-2xl font-serif font-medium text-gray-900 leading-relaxed mb-6 first-letter:text-[4.5rem] first-letter:font-serif first-letter:font-bold first-letter:float-left first-letter:leading-[0.8] first-letter:mr-2 first-letter:mt-1'
                               : 'text-[16px] md:text-[17px] text-gray-700 leading-[1.9] mb-7 indent-6 max-w-[70ch]'
                           }
                         >
-                          <HighlightNumbers text={trimmed} />
+                          <HighlightText text={trimmed} />
                         </p>
-                        {/* Visual divider between lead and body */}
                         {i === 0 && <hr className="my-6 border-gray-100" />}
                       </Fragment>
                     )
@@ -347,36 +360,52 @@ export default async function NoticiaDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Te puede interesar */}
+      {/* Te puede interesar — TN-style horizontal cards */}
       {relatedClusters.length > 0 && (
-        <section className="bg-gray-50 border-t border-gray-200 py-12">
+        <section className="bg-gray-50 border-t border-gray-200 py-10">
           <div className="max-w-6xl mx-auto px-4">
-            <h2 className="font-serif font-bold text-2xl text-gray-900 mb-6">
+            <h2 className="font-serif font-bold text-xl text-gray-900 mb-5 uppercase tracking-wide">
               Te puede interesar
             </h2>
-            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-5">
+            <div className="space-y-3">
               {relatedClusters.map(related => {
                 const relatedBadge = CATEGORY_BADGE[related.category ?? ''] ?? 'bg-gray-500'
                 return (
                   <Link
                     key={related.id}
                     href={`/noticias/${related.id}`}
-                    className="group bg-white rounded-xl border border-gray-200 p-5 hover:border-brand-300 hover:shadow-sm transition-all flex flex-col gap-3"
+                    className="group flex items-center gap-4 bg-white border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all overflow-hidden"
                   >
-                    <span className={`self-start ${relatedBadge} text-white text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full`}>
-                      {related.category ?? 'General'}
-                    </span>
-                    <h3 className="font-serif font-bold text-gray-900 leading-snug group-hover:text-brand-600 transition-colors line-clamp-3">
-                      {related.title}
-                    </h3>
-                    {related.synthesis && (
-                      <p className="text-sm text-gray-500 leading-relaxed line-clamp-2 flex-1">
-                        {related.synthesis}
-                      </p>
-                    )}
-                    <span className="text-xs text-gray-400">
-                      {related.source_count} {related.source_count === 1 ? 'medio' : 'medios'}
-                    </span>
+                    {/* Thumbnail */}
+                    <div className="shrink-0 w-28 sm:w-36 h-24 bg-gray-100 overflow-hidden">
+                      {related.image_url ? (
+                        <img
+                          src={related.image_url}
+                          alt={related.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                          <span className={`w-8 h-8 rounded-full ${relatedBadge} opacity-40`} />
+                        </div>
+                      )}
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 py-3 pr-4 min-w-0">
+                      <span className={`inline-block ${relatedBadge} text-white text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full mb-1.5`}>
+                        {related.category ?? 'General'}
+                      </span>
+                      <h3 className="font-serif font-bold text-gray-900 leading-snug group-hover:text-cada-blue transition-colors line-clamp-2 text-sm sm:text-base">
+                        {related.title}
+                      </h3>
+                      <span className="text-xs text-gray-400 mt-1 block">
+                        {related.source_count} {related.source_count === 1 ? 'medio' : 'medios'}
+                      </span>
+                    </div>
+                    {/* Arrow indicator */}
+                    <div className="shrink-0 pr-4 text-gray-300 group-hover:text-cada-blue transition-colors text-lg">
+                      →
+                    </div>
                   </Link>
                 )
               })}
