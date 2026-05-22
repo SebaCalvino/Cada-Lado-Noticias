@@ -40,7 +40,7 @@ export default async function Footer() {
           {/* Brand column */}
           <div className="md:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-brand-600 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-[#0f172a] border border-white/20 flex items-center justify-center">
                 <span className="text-white font-bold text-sm">CL</span>
               </div>
               <span className="text-white font-bold text-lg">Cada Lado</span>

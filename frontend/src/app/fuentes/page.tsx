@@ -48,7 +48,7 @@ export default async function FuentesPage() {
                 href={source.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-gray-400 hover:text-brand-600 transition-colors mt-1"
+                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors mt-1"
               >
                 Visitar <ExternalLink size={11} />
               </a>
@@ -74,8 +74,8 @@ export default async function FuentesPage() {
         ))}
       </div>
 
-      <div className="mt-8 bg-blue-50 rounded-xl border border-blue-100 p-5 text-sm text-blue-800">
-        <strong>Nota metodológica:</strong> La posición ideológica es una estimación basada en análisis
+      <div className="mt-8 bg-gray-50 rounded-xl border border-gray-200 p-5 text-sm text-gray-600">
+        <strong className="text-gray-900">Nota metodológica:</strong> La posición ideológica es una estimación basada en análisis
         de cobertura periodística y no representa una valoración positiva o negativa de ningún medio.
         Cada posicionamiento es discutible y puede cambiar con el tiempo.
       </div>

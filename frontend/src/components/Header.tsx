@@ -15,16 +15,16 @@ export default function Header() {
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">CL</span>
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-[#0f172a] flex items-center justify-center">
+            <span className="text-white font-bold text-xs tracking-tight">CL</span>
           </div>
           <span className="font-serif font-bold text-lg text-gray-900 hidden sm:block">
             Cada Lado
           </span>
         </Link>
 
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-0.5">
           {NAV.map(({ href, label }) => (
             <Link
               key={href}
@@ -32,8 +32,8 @@ export default function Header() {
               className={cn(
                 'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
                 pathname === href
-                  ? 'bg-brand-50 text-brand-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? 'bg-gray-100 text-gray-900'
+                  : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
               )}
             >
               {label}
