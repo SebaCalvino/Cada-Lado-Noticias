@@ -367,17 +367,17 @@ export default async function NoticiaDetailPage({ params }: Props) {
             <h2 className="font-serif font-bold text-xl text-gray-900 mb-5 uppercase tracking-wide">
               Te puede interesar
             </h2>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {relatedClusters.map(related => {
                 const relatedBadge = CATEGORY_BADGE[related.category ?? ''] ?? 'bg-gray-500'
                 return (
                   <Link
                     key={related.id}
                     href={`/noticias/${related.id}`}
-                    className="group flex items-center gap-4 bg-white border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all overflow-hidden"
+                    className="group flex items-stretch gap-5 bg-white border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all overflow-hidden"
                   >
-                    {/* Thumbnail */}
-                    <div className="shrink-0 w-28 sm:w-36 h-24 bg-gray-100 overflow-hidden">
+                    {/* Thumbnail — large like TN */}
+                    <div className="shrink-0 w-44 sm:w-72 md:w-80 h-32 sm:h-44 bg-gray-100 overflow-hidden">
                       {related.image_url ? (
                         <img
                           src={related.image_url}
@@ -386,24 +386,29 @@ export default async function NoticiaDetailPage({ params }: Props) {
                         />
                       ) : (
                         <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                          <span className={`w-8 h-8 rounded-full ${relatedBadge} opacity-40`} />
+                          <span className={`w-12 h-12 rounded-full ${relatedBadge} opacity-40`} />
                         </div>
                       )}
                     </div>
                     {/* Content */}
-                    <div className="flex-1 py-3 pr-4 min-w-0">
-                      <span className={`inline-block ${relatedBadge} text-white text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full mb-1.5`}>
+                    <div className="flex-1 py-4 sm:py-5 pr-4 min-w-0 flex flex-col justify-center">
+                      <span className={`self-start ${relatedBadge} text-white text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full mb-2`}>
                         {related.category ?? 'General'}
                       </span>
-                      <h3 className="font-serif font-bold text-gray-900 leading-snug group-hover:text-cada-blue transition-colors line-clamp-2 text-sm sm:text-base">
+                      <h3 className="font-serif font-bold text-gray-900 leading-snug group-hover:text-cada-blue transition-colors line-clamp-3 text-lg sm:text-xl">
                         {related.title}
                       </h3>
-                      <span className="text-xs text-gray-400 mt-1 block">
+                      {related.synthesis && (
+                        <p className="hidden sm:block text-sm text-gray-500 leading-relaxed line-clamp-2 mt-1.5">
+                          {related.synthesis}
+                        </p>
+                      )}
+                      <span className="text-xs text-gray-400 mt-2 block">
                         {related.source_count} {related.source_count === 1 ? 'medio' : 'medios'}
                       </span>
                     </div>
                     {/* Arrow indicator */}
-                    <div className="shrink-0 pr-4 text-gray-300 group-hover:text-cada-blue transition-colors text-lg">
+                    <div className="shrink-0 self-center pr-5 text-gray-300 group-hover:text-cada-blue transition-colors text-xl">
                       →
                     </div>
                   </Link>
