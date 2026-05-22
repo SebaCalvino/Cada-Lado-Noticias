@@ -4,12 +4,26 @@
 
 @layer base {
   :root {
-    --font-inter: 'Inter', system-ui, sans-serif;
+    --font-dm-sans: 'DM Sans', system-ui, sans-serif;
     --font-playfair: 'Playfair Display', Georgia, serif;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-white text-gray-900 antialiased;
+  }
+
+  ::selection {
+    background-color: #3B5BDB;
+    color: white;
+  }
+
+  *:focus-visible {
+    outline: 2px solid #3B5BDB;
+    outline-offset: 2px;
   }
 
   h1, h2, h3 {
