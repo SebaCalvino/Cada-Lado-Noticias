@@ -56,8 +56,8 @@ Producí un análisis completo en formato JSON con esta estructura exacta:
   "source_analyses": [
     {{
       "source_slug": "slug del medio",
-      "emphasis": "Qué aspectos enfatiza o resalta este medio (1-2 oraciones)",
-      "omissions": "Qué datos relevantes omite o minimiza este medio comparado con los demás (1-2 oraciones). Si no omite nada relevante, escribí 'Sin omisiones destacadas.'"
+      "emphasis": "Qué aspectos, ángulos o datos enfatiza este medio. Incluí el tono editorial, a quién le dan voz, qué términos usa y qué perspectiva política o ideológica refleja su cobertura. 3-4 oraciones con sustancia.",
+      "omissions": "Qué datos, voces o contexto relevante omite o minimiza este medio en comparación con los demás. Sé específico: qué fuentes no consultó, qué hechos no menciona, qué contexto histórico o económico ignoró. 3-4 oraciones. Si la cobertura es genuinamente completa, escribí 'Sin omisiones destacadas.'"
     }}
   ]
 }}

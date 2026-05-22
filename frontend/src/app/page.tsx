@@ -23,25 +23,28 @@ export default async function HomePage() {
   return (
     <div>
       {/* Hero */}
-      <section className="bg-gradient-to-br from-brand-900 to-brand-700 text-white">
-        <div className="max-w-6xl mx-auto px-4 py-16 md:py-24">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-3 py-1 text-sm mb-6">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              Actualizado 3 veces por día
+      <section className="bg-[#0f172a] text-white relative overflow-hidden">
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '60px 60px'}} />
+        <div className="relative max-w-6xl mx-auto px-4 py-20 md:py-32">
+          <div className="max-w-4xl">
+            <div className="flex items-center gap-2 text-sm text-green-400 font-medium mb-8 tracking-wide uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              Monitoreo en tiempo real · 8 medios · Argentina
             </div>
-            <h1 className="text-4xl md:text-5xl font-serif font-bold leading-tight mb-4">
-              La misma noticia,<br />todas las voces.
+            <h1 className="text-4xl md:text-6xl font-serif font-bold leading-[1.1] mb-6 text-white">
+              ¿Demasiada desinformación?<br />
+              <span className="text-gray-300">Mirá lo que dice cada lado.</span>
             </h1>
-            <p className="text-xl text-blue-100 mb-8 leading-relaxed">
-              Cada medio argentino cuenta la realidad a su manera. Nosotros analizamos 8 diarios,
-              sintetizamos la información y te mostramos qué dice cada uno —y qué omite deliberadamente.
+            <p className="text-lg md:text-xl text-gray-400 mb-10 leading-relaxed max-w-2xl">
+              La misma noticia, analizada desde Clarín hasta La Izquierda Diario.
+              Sintetizamos, comparamos y te mostramos qué enfatiza cada medio —y qué omite deliberadamente.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/noticias" className="bg-white text-brand-700 font-semibold px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-blue-50 transition-colors">
-                Ver las noticias de hoy <ArrowRight size={18} />
+              <Link href="/noticias" className="bg-white text-gray-900 font-semibold px-7 py-3.5 rounded-lg flex items-center gap-2 hover:bg-gray-100 transition-colors text-sm">
+                Ver las noticias de hoy <ArrowRight size={16} />
               </Link>
-              <Link href="/fuentes" className="border border-white/30 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/10 transition-colors">
+              <Link href="/fuentes" className="border border-white/20 text-gray-300 font-semibold px-7 py-3.5 rounded-lg hover:bg-white/5 transition-colors text-sm">
                 Conocer los medios
               </Link>
             </div>
@@ -117,8 +120,7 @@ export default async function HomePage() {
           <div className="card p-12 text-center">
             <p className="text-gray-500 text-lg mb-2">Todavía no hay noticias</p>
             <p className="text-gray-400 text-sm">
-              El sistema scrapeará automáticamente a las 7am, 1pm y 7pm (hora Argentina).
-              También podés activar el scraping manual desde el panel.
+              El sistema monitorea los medios continuamente y procesa las noticias en cuanto aparecen.
             </p>
           </div>
         ) : (

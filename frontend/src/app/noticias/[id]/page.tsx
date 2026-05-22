@@ -12,16 +12,16 @@ interface Props {
   params: { id: string }
 }
 
-const CATEGORY_HERO: Record<string, string> = {
-  'Política': 'from-blue-900 via-blue-800 to-blue-700',
-  'Economía': 'from-emerald-900 via-emerald-800 to-emerald-700',
-  'Sociedad': 'from-violet-900 via-violet-800 to-violet-700',
-  'Seguridad': 'from-red-900 via-red-800 to-red-700',
-  'Internacional': 'from-indigo-900 via-indigo-800 to-indigo-700',
-  'Deportes': 'from-orange-900 via-orange-800 to-orange-700',
-  'Cultura': 'from-pink-900 via-pink-800 to-pink-700',
-  'Tecnología': 'from-cyan-900 via-cyan-800 to-cyan-700',
-  'Ambiente': 'from-teal-900 via-teal-800 to-teal-700',
+const CATEGORY_ACCENT: Record<string, string> = {
+  'Política': '#1d4ed8',
+  'Economía': '#059669',
+  'Sociedad': '#7c3aed',
+  'Seguridad': '#dc2626',
+  'Internacional': '#4338ca',
+  'Deportes': '#d97706',
+  'Cultura': '#db2777',
+  'Tecnología': '#0891b2',
+  'Ambiente': '#0d9488',
 }
 
 const CATEGORY_BADGE: Record<string, string> = {
@@ -62,7 +62,7 @@ export default async function NoticiaDetailPage({ params }: Props) {
     // ignore
   }
 
-  const heroGradient = CATEGORY_HERO[cluster.category ?? ''] ?? 'from-gray-900 via-gray-800 to-gray-700'
+  const accentColor = CATEGORY_ACCENT[cluster.category ?? ''] ?? '#374151'
   const badgeColor = CATEGORY_BADGE[cluster.category ?? ''] ?? 'bg-gray-500'
   const readingTime = estimateReadingTime(cluster.synthesis)
   const paragraphs = cluster.synthesis ? cluster.synthesis.split(/\n\n+/) : []
@@ -96,7 +96,7 @@ export default async function NoticiaDetailPage({ params }: Props) {
           </div>
         </section>
       ) : (
-        <section className={`bg-gradient-to-br ${heroGradient} text-white mt-4`}>
+        <section className="bg-[#0f172a] text-white mt-4" style={{ borderTop: `4px solid ${accentColor}` }}>
           <div className="max-w-6xl mx-auto px-4 py-12 md:py-16">
             <span className={`inline-block ${badgeColor} text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-4`}>
               {cluster.category ?? 'General'}
@@ -190,14 +190,14 @@ export default async function NoticiaDetailPage({ params }: Props) {
 
               {/* Key facts card */}
               {cluster.key_facts && cluster.key_facts.length > 0 && (
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
-                  <h3 className="font-bold text-blue-900 text-sm uppercase tracking-wide mb-4">
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+                  <h3 className="font-bold text-gray-800 text-xs uppercase tracking-widest mb-4">
                     Puntos clave
                   </h3>
                   <ul className="space-y-3">
                     {cluster.key_facts.map((fact, i) => (
-                      <li key={i} className="flex items-start gap-3 text-sm text-blue-900 leading-snug">
-                        <span className="w-5 h-5 rounded-full bg-blue-200 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                      <li key={i} className="flex items-start gap-3 text-sm text-gray-700 leading-snug">
+                        <span className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 text-gray-600">
                           {i + 1}
                         </span>
                         {fact}
@@ -207,9 +207,69 @@ export default async function NoticiaDetailPage({ params }: Props) {
                 </div>
               )}
 
+              {/* Ideology spectrum */}
+              {cluster.articles.length > 0 && (() => {
+                const IDEOLOGY: Record<string, { score: number; label: string }> = {
+                  clarin:      { score:  0.3, label: 'Centro-derecha' },
+                  lanacion:    { score:  0.6, label: 'Centro-derecha' },
+                  infobae:     { score:  0.2, label: 'Centro' },
+                  pagina12:    { score: -0.7, label: 'Izquierda' },
+                  ambito:      { score:  0.1, label: 'Centro' },
+                  cronista:    { score:  0.2, label: 'Centro' },
+                  perfil:      { score: -0.1, label: 'Centro' },
+                  laizquierda: { score: -0.8, label: 'Izquierda' },
+                }
+                const sources = cluster.articles.map(a => ({
+                  slug: a.source_slug,
+                  name: a.source_name,
+                  color: a.source_color,
+                  score: IDEOLOGY[a.source_slug]?.score ?? 0,
+                  label: IDEOLOGY[a.source_slug]?.label ?? 'Centro',
+                }))
+                return (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+                    <h3 className="font-bold text-gray-800 text-xs uppercase tracking-widest mb-4">
+                      Espectro ideológico
+                    </h3>
+                    {/* Spectrum bar */}
+                    <div className="relative mb-5">
+                      <div className="flex justify-between text-xs text-gray-400 mb-1.5">
+                        <span>← Izquierda</span>
+                        <span>Derecha →</span>
+                      </div>
+                      <div className="h-2 rounded-full" style={{background: 'linear-gradient(to right, #2563eb, #9ca3af, #dc2626)'}} />
+                      {/* Source dots */}
+                      {sources.map(s => (
+                        <div
+                          key={s.slug}
+                          title={`${s.name} · ${s.label}`}
+                          className="absolute top-[18px] -translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-md cursor-default"
+                          style={{
+                            left: `${((s.score + 1) / 2) * 100}%`,
+                            backgroundColor: s.color,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    {/* Source list */}
+                    <ul className="space-y-2">
+                      {sources.sort((a, b) => a.score - b.score).map(s => (
+                        <li key={s.slug} className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{backgroundColor: s.color}} />
+                            <span className="font-medium text-gray-700">{s.name}</span>
+                          </span>
+                          <span className="text-gray-400">{s.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })()}
+
               {/* Ad placeholder sidebar */}
-              <div className="bg-gray-100 border border-dashed border-gray-300 rounded-lg h-48 flex items-center justify-center text-gray-400 text-xs font-semibold uppercase tracking-widest">
-                PUBLICIDAD
+              <div className="bg-gray-50 border border-gray-200 rounded-lg h-40 flex items-center justify-center text-gray-300 text-xs font-medium uppercase tracking-widest">
+                Espacio publicitario
               </div>
             </div>
           </aside>
