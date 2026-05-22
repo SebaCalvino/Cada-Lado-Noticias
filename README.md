@@ -1,4 +1,4 @@
-# Cada Lado Noticias
+# Cada Lado Noticias.
 
 **La misma noticia, todas las voces. Sin que te vendan humo..**
 
