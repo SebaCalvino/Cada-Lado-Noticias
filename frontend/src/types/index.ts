@@ -53,6 +53,14 @@ export interface NewsClusterDetail {
   comments?: ClusterComment[]
 }
 
+export interface Tweet {
+  username: string
+  display_name: string
+  text: string
+  tweet_url: string
+  published_at: string
+}
+
 export interface Stats {
   total_clusters: number
   total_articles: number

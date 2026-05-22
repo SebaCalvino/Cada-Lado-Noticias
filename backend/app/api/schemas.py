@@ -83,3 +83,11 @@ class StatsSchema(BaseModel):
 class ScrapeResponseSchema(BaseModel):
     status: str
     message: str
+
+
+class TweetSchema(BaseModel):
+    username: str
+    display_name: str
+    text: str
+    tweet_url: str
+    published_at: datetime

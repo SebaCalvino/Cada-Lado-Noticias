@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Clock, Layers, BookOpen } from 'lucide-react'
@@ -5,6 +6,7 @@ import { getNewsDetail, getNews } from '@/lib/api'
 import { timeAgo } from '@/lib/utils'
 import CoverageBar from '@/components/CoverageBar'
 import CommentsSection from '@/components/CommentsSection'
+import XOpinions from '@/components/XOpinions'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,33 +15,50 @@ interface Props {
 }
 
 const CATEGORY_ACCENT: Record<string, string> = {
-  'Política': '#1d4ed8',
-  'Economía': '#059669',
-  'Sociedad': '#7c3aed',
-  'Seguridad': '#dc2626',
-  'Internacional': '#4338ca',
-  'Deportes': '#d97706',
-  'Cultura': '#db2777',
-  'Tecnología': '#0891b2',
-  'Ambiente': '#0d9488',
+  'Política':       '#1d4ed8',
+  'Economía':       '#059669',
+  'Sociedad':       '#7c3aed',
+  'Seguridad':      '#dc2626',
+  'Internacional':  '#4338ca',
+  'Deportes':       '#d97706',
+  'Cultura':        '#db2777',
+  'Tecnología':     '#0891b2',
+  'Ambiente':       '#0d9488',
 }
 
 const CATEGORY_BADGE: Record<string, string> = {
-  'Política': 'bg-blue-500',
-  'Economía': 'bg-emerald-500',
-  'Sociedad': 'bg-violet-500',
-  'Seguridad': 'bg-red-500',
-  'Internacional': 'bg-indigo-500',
-  'Deportes': 'bg-orange-500',
-  'Cultura': 'bg-pink-500',
-  'Tecnología': 'bg-cyan-500',
-  'Ambiente': 'bg-teal-500',
+  'Política':       'bg-blue-500',
+  'Economía':       'bg-emerald-500',
+  'Sociedad':       'bg-violet-500',
+  'Seguridad':      'bg-red-500',
+  'Internacional':  'bg-indigo-500',
+  'Deportes':       'bg-orange-500',
+  'Cultura':        'bg-pink-500',
+  'Tecnología':     'bg-cyan-500',
+  'Ambiente':       'bg-teal-500',
 }
 
 function estimateReadingTime(text: string | null): number {
   if (!text) return 1
-  const words = text.trim().split(/\s+/).length
-  return Math.max(1, Math.ceil(words / 200))
+  return Math.max(1, Math.ceil(text.trim().split(/\s+/).length / 200))
+}
+
+// Bold numbers, percentages, and monetary values inline
+function HighlightNumbers({ text }: { text: string }) {
+  const parts = text.split(/((?:\$\s?)?\d[\d.,]*(?:\s*(?:%|millones?|mil millones?|trillones?|bn|bn\.?))?)/gi)
+  return (
+    <>
+      {parts.map((part, i) =>
+        /^[\d$]/.test(part) ? (
+          <strong key={i} className="font-semibold text-gray-900 tabular-nums">
+            {part}
+          </strong>
+        ) : (
+          <Fragment key={i}>{part}</Fragment>
+        )
+      )}
+    </>
+  )
 }
 
 export default async function NoticiaDetailPage({ params }: Props) {
@@ -53,7 +72,6 @@ export default async function NoticiaDetailPage({ params }: Props) {
     notFound()
   }
 
-  // Fetch related news for "Te puede interesar"
   let relatedClusters: Awaited<ReturnType<typeof getNews>> = []
   try {
     const allNews = await getNews(1)
@@ -63,19 +81,22 @@ export default async function NoticiaDetailPage({ params }: Props) {
   }
 
   const accentColor = CATEGORY_ACCENT[cluster.category ?? ''] ?? '#374151'
-  const badgeColor = CATEGORY_BADGE[cluster.category ?? ''] ?? 'bg-gray-500'
+  const badgeColor  = CATEGORY_BADGE[cluster.category ?? '']  ?? 'bg-gray-500'
   const readingTime = estimateReadingTime(cluster.synthesis)
-  const paragraphs = cluster.synthesis ? cluster.synthesis.split(/\n\n+/) : []
+  const paragraphs  = cluster.synthesis ? cluster.synthesis.split(/\n\n+/).filter(p => p.trim()) : []
+
+  // Pick a pull-quote: first key fact that's long enough to be interesting
+  const pullQuote = cluster.key_facts?.find(f => f.length > 60) ?? null
 
   return (
     <div>
       {/* Back button */}
-      <div className="max-w-6xl mx-auto px-4 pt-6">
+      <div className="max-w-6xl mx-auto px-4 pt-5">
         <Link
           href="/noticias"
-          className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors font-medium"
+          className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-gray-700 transition-colors font-medium"
         >
-          <ArrowLeft size={16} /> Volver a noticias
+          <ArrowLeft size={15} /> Volver a noticias
         </Link>
       </div>
 
@@ -85,23 +106,26 @@ export default async function NoticiaDetailPage({ params }: Props) {
           className="relative text-white mt-4 bg-cover bg-center"
           style={{ backgroundImage: `url(${cluster.image_url})` }}
         >
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="relative max-w-6xl mx-auto px-4 py-12 md:py-16">
-            <span className={`inline-block ${badgeColor} text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-4`}>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/20" />
+          <div className="relative max-w-6xl mx-auto px-4 py-14 md:py-20">
+            <span className={`inline-block ${badgeColor} text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-5`}>
               {cluster.category ?? 'General'}
             </span>
-            <h1 className="text-3xl md:text-5xl font-serif font-bold leading-tight max-w-4xl">
+            <h1 className="text-2xl sm:text-3xl md:text-5xl font-serif font-bold leading-tight max-w-4xl drop-shadow-sm">
               {cluster.title}
             </h1>
           </div>
         </section>
       ) : (
-        <section className="bg-[#0f172a] text-white mt-4" style={{ borderTop: `4px solid ${accentColor}` }}>
+        <section
+          className="bg-[#0f172a] text-white mt-4"
+          style={{ borderTop: `4px solid ${accentColor}` }}
+        >
           <div className="max-w-6xl mx-auto px-4 py-12 md:py-16">
-            <span className={`inline-block ${badgeColor} text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-4`}>
+            <span className={`inline-block ${badgeColor} text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-5`}>
               {cluster.category ?? 'General'}
             </span>
-            <h1 className="text-3xl md:text-5xl font-serif font-bold leading-tight max-w-4xl">
+            <h1 className="text-2xl sm:text-3xl md:text-5xl font-serif font-bold leading-tight max-w-4xl">
               {cluster.title}
             </h1>
           </div>
@@ -110,64 +134,88 @@ export default async function NoticiaDetailPage({ params }: Props) {
 
       {/* Metadata bar */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap gap-4 text-sm text-gray-500">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-500">
           <div className="flex items-center gap-1.5">
-            <Clock size={14} />
+            <Clock size={13} />
             <span>{timeAgo(cluster.published_at)}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <BookOpen size={14} />
+            <BookOpen size={13} />
             <span>{readingTime} min de lectura</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Layers size={14} />
+            <Layers size={13} />
             <span>{cluster.source_count} {cluster.source_count === 1 ? 'medio' : 'medios'}</span>
           </div>
         </div>
       </div>
 
       {/* Ad placeholder */}
-      <div className="max-w-6xl mx-auto px-4 my-6">
-        <div className="bg-gray-100 border border-dashed border-gray-300 rounded-lg h-20 flex items-center justify-center text-gray-400 text-xs font-semibold uppercase tracking-widest">
-          PUBLICIDAD
+      <div className="max-w-6xl mx-auto px-4 my-5">
+        <div className="bg-gray-50 border border-dashed border-gray-200 rounded-lg h-16 flex items-center justify-center text-gray-300 text-xs font-semibold uppercase tracking-widest">
+          Publicidad
         </div>
       </div>
 
-      {/* Main content: two columns */}
+      {/* Main content */}
       <div className="max-w-6xl mx-auto px-4 pb-16">
-        <div className="flex flex-col lg:flex-row gap-8">
+        <div className="flex flex-col lg:flex-row gap-8 xl:gap-12">
 
-          {/* Main column (70%) */}
-          <main className="lg:w-[70%] min-w-0">
+          {/* Main column */}
+          <main className="lg:w-[65%] min-w-0">
 
-            {/* Synthesis as article paragraphs */}
+            {/* Synthesis article */}
             {paragraphs.length > 0 && (
               <article className="mb-10">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center shrink-0">
-                    <span className="text-white text-xs font-bold">IA</span>
+                {/* Section label */}
+                <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
+                  <span className="w-5 h-5 rounded-full bg-brand-500 flex items-center justify-center shrink-0">
+                    <span className="text-white text-[10px] font-bold leading-none">IA</span>
                   </span>
-                  <h2 className="font-semibold text-gray-500 text-xs uppercase tracking-wider">
-                    Síntesis neutral
-                  </h2>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                    Síntesis neutral · generada por IA
+                  </span>
                 </div>
-                <div className="prose prose-lg max-w-none">
-                  {paragraphs.map((para, i) => (
-                    <p
-                      key={i}
-                      className={`text-gray-800 leading-relaxed mb-5 ${i === 0 ? 'text-xl font-medium text-gray-900' : 'text-base'}`}
-                    >
-                      {para.trim()}
-                    </p>
-                  ))}
+
+                {/* Paragraphs with hooks */}
+                <div>
+                  {paragraphs.map((para, i) => {
+                    const trimmed = para.trim()
+                    const showPullQuote = i === 2 && pullQuote
+                    return (
+                      <Fragment key={i}>
+                        {/* Pull quote after 3rd paragraph */}
+                        {showPullQuote && (
+                          <blockquote className="my-7 pl-5 border-l-4 border-brand-500">
+                            <p className="text-lg md:text-xl font-serif italic text-gray-600 leading-snug">
+                              "{pullQuote}"
+                            </p>
+                          </blockquote>
+                        )}
+                        <p
+                          className={
+                            i === 0
+                              ? // Lead paragraph: larger serif with drop cap
+                                'text-xl md:text-2xl font-serif font-medium text-gray-900 leading-relaxed mb-6 first-letter:text-[4.5rem] first-letter:font-serif first-letter:font-bold first-letter:float-left first-letter:leading-[0.8] first-letter:mr-2 first-letter:mt-1'
+                              : 'text-[16px] md:text-[17px] text-gray-700 leading-[1.85] mb-5'
+                          }
+                        >
+                          {i === 0 ? <HighlightNumbers text={trimmed} /> : <HighlightNumbers text={trimmed} />}
+                        </p>
+                      </Fragment>
+                    )
+                  })}
                 </div>
               </article>
             )}
 
+            {/* X opinions - client component, loads asynchronously */}
+            <XOpinions clusterId={cluster.id} />
+
             {/* Per-source coverage */}
             {cluster.articles.length > 0 && (
-              <section>
-                <h2 className="font-serif font-bold text-2xl text-gray-900 mb-5 border-b border-gray-200 pb-3">
+              <section className="mt-10 border-t border-gray-100 pt-8">
+                <h2 className="font-serif font-bold text-2xl text-gray-900 mb-5">
                   Cómo lo cubrió cada medio
                 </h2>
                 <div className="space-y-4">
@@ -178,17 +226,17 @@ export default async function NoticiaDetailPage({ params }: Props) {
               </section>
             )}
 
-            {/* Comments section */}
+            {/* Reader comments */}
             {cluster.comments && cluster.comments.length > 0 && (
               <CommentsSection comments={cluster.comments} />
             )}
           </main>
 
-          {/* Sidebar (30%) */}
-          <aside className="lg:w-[30%]">
-            <div className="sticky top-8 space-y-6">
+          {/* Sidebar */}
+          <aside className="lg:w-[35%]">
+            <div className="sticky top-8 space-y-5">
 
-              {/* Key facts card */}
+              {/* Key facts */}
               {cluster.key_facts && cluster.key_facts.length > 0 && (
                 <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
                   <h3 className="font-bold text-gray-800 text-xs uppercase tracking-widest mb-4">
@@ -210,18 +258,18 @@ export default async function NoticiaDetailPage({ params }: Props) {
               {/* Ideology spectrum */}
               {cluster.articles.length > 0 && (() => {
                 const IDEOLOGY: Record<string, { score: number; label: string }> = {
-                  clarin:      { score:  0.3, label: 'Centro-derecha' },
-                  lanacion:    { score:  0.6, label: 'Centro-derecha' },
-                  infobae:     { score:  0.2, label: 'Centro' },
-                  pagina12:    { score: -0.7, label: 'Izquierda' },
-                  ambito:      { score:  0.1, label: 'Centro' },
-                  cronista:    { score:  0.2, label: 'Centro' },
-                  perfil:      { score: -0.1, label: 'Centro' },
-                  laizquierda: { score: -0.8, label: 'Izquierda' },
+                  clarin:       { score:  0.3, label: 'Centro-derecha' },
+                  lanacion:     { score:  0.6, label: 'Centro-derecha' },
+                  infobae:      { score:  0.2, label: 'Centro' },
+                  pagina12:     { score: -0.7, label: 'Izquierda' },
+                  ambito:       { score:  0.1, label: 'Centro' },
+                  cronista:     { score:  0.2, label: 'Centro' },
+                  perfil:       { score: -0.1, label: 'Centro' },
+                  laizquierda:  { score: -0.8, label: 'Izquierda' },
                 }
                 const sources = cluster.articles.map(a => ({
-                  slug: a.source_slug,
-                  name: a.source_name,
+                  slug:  a.source_slug,
+                  name:  a.source_name,
                   color: a.source_color,
                   score: IDEOLOGY[a.source_slug]?.score ?? 0,
                   label: IDEOLOGY[a.source_slug]?.label ?? 'Centro',
@@ -231,14 +279,15 @@ export default async function NoticiaDetailPage({ params }: Props) {
                     <h3 className="font-bold text-gray-800 text-xs uppercase tracking-widest mb-4">
                       Espectro ideológico
                     </h3>
-                    {/* Spectrum bar */}
                     <div className="relative mb-5">
                       <div className="flex justify-between text-xs text-gray-400 mb-1.5">
                         <span>← Izquierda</span>
                         <span>Derecha →</span>
                       </div>
-                      <div className="h-2 rounded-full" style={{background: 'linear-gradient(to right, #2563eb, #9ca3af, #dc2626)'}} />
-                      {/* Source dots */}
+                      <div
+                        className="h-2 rounded-full"
+                        style={{ background: 'linear-gradient(to right, #2563eb, #9ca3af, #dc2626)' }}
+                      />
                       {sources.map(s => (
                         <div
                           key={s.slug}
@@ -251,12 +300,11 @@ export default async function NoticiaDetailPage({ params }: Props) {
                         />
                       ))}
                     </div>
-                    {/* Source list */}
                     <ul className="space-y-2">
-                      {sources.sort((a, b) => a.score - b.score).map(s => (
+                      {[...sources].sort((a, b) => a.score - b.score).map(s => (
                         <li key={s.slug} className="flex items-center justify-between text-xs">
                           <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full shrink-0" style={{backgroundColor: s.color}} />
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                             <span className="font-medium text-gray-700">{s.name}</span>
                           </span>
                           <span className="text-gray-400">{s.label}</span>
@@ -267,8 +315,8 @@ export default async function NoticiaDetailPage({ params }: Props) {
                 )
               })()}
 
-              {/* Ad placeholder sidebar */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg h-40 flex items-center justify-center text-gray-300 text-xs font-medium uppercase tracking-widest">
+              {/* Sidebar ad */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg h-36 flex items-center justify-center text-gray-300 text-xs font-medium uppercase tracking-widest">
                 Espacio publicitario
               </div>
             </div>
@@ -283,7 +331,7 @@ export default async function NoticiaDetailPage({ params }: Props) {
             <h2 className="font-serif font-bold text-2xl text-gray-900 mb-6">
               Te puede interesar
             </h2>
-            <div className="grid md:grid-cols-3 gap-5">
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-5">
               {relatedClusters.map(related => {
                 const relatedBadge = CATEGORY_BADGE[related.category ?? ''] ?? 'bg-gray-500'
                 return (
@@ -299,7 +347,7 @@ export default async function NoticiaDetailPage({ params }: Props) {
                       {related.title}
                     </h3>
                     {related.synthesis && (
-                      <p className="text-sm text-gray-600 leading-relaxed line-clamp-3 flex-1">
+                      <p className="text-sm text-gray-500 leading-relaxed line-clamp-2 flex-1">
                         {related.synthesis}
                       </p>
                     )}

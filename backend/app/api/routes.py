@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import List, Optional
 
@@ -12,9 +13,14 @@ from app.database import get_db
 from app.models import Source, RawArticle, NewsCluster, ClusterArticle, ClusterComment
 from app.api.schemas import (
     SourceSchema, NewsClusterListSchema, NewsClusterDetailSchema,
-    ClusterArticleSchema, ClusterCommentSchema, StatsSchema, ScrapeResponseSchema
+    ClusterArticleSchema, ClusterCommentSchema, StatsSchema, ScrapeResponseSchema,
+    TweetSchema,
 )
 from app.pipeline import run_scraping_pipeline
+
+# Simple in-memory cache: cluster_id -> (timestamp, list[TweetSchema])
+_tweet_cache: dict = {}
+_TWEET_TTL = 300  # 5 minutes
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -135,6 +141,34 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
         .order_by(desc("count"))
     )
     return [{"category": row.category, "count": row.count} for row in result.all()]
+
+
+@router.get("/news/{cluster_id}/tweets", response_model=List[TweetSchema])
+async def get_cluster_tweets(cluster_id: int, db: AsyncSession = Depends(get_db)):
+    from app.scrapers.twitter import get_tweets_for_cluster
+
+    cached = _tweet_cache.get(cluster_id)
+    if cached and time.time() - cached[0] < _TWEET_TTL:
+        return cached[1]
+
+    result = await db.execute(select(NewsCluster).where(NewsCluster.id == cluster_id))
+    cluster = result.scalar_one_or_none()
+    if not cluster:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    tweets = await get_tweets_for_cluster(cluster.title, cluster.key_facts or [])
+    schemas = [
+        TweetSchema(
+            username=t.username,
+            display_name=t.display_name,
+            text=t.text,
+            tweet_url=t.tweet_url,
+            published_at=t.published_at,
+        )
+        for t in tweets
+    ]
+    _tweet_cache[cluster_id] = (time.time(), schemas)
+    return schemas
 
 
 @router.post("/scrape", response_model=ScrapeResponseSchema)
