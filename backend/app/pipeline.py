@@ -157,4 +157,46 @@ async def run_scraping_pipeline():
                 art.clustered = True
 
         await db.commit()
+
+        # Re-synthesize clusters that previously failed (synthesis is null)
+        failed_result = await db.execute(
+            select(NewsCluster)
+            .options(
+                selectinload(NewsCluster.articles)
+                .selectinload(ClusterArticle.article)
+                .selectinload(RawArticle.source)
+            )
+            .where(NewsCluster.synthesis == None)
+        )
+        failed_clusters = failed_result.scalars().all()
+        if failed_clusters:
+            logger.info(f"Re-synthesizing {len(failed_clusters)} clusters without synthesis")
+            for nc in failed_clusters:
+                arts_for_synthesis = [
+                    ArticleForSynthesis(
+                        source_name=ca.article.source.name,
+                        source_slug=ca.article.source.slug,
+                        title=ca.article.title,
+                        summary=ca.article.summary or "",
+                        url=ca.article.url,
+                    )
+                    for ca in nc.articles
+                ]
+                if len(arts_for_synthesis) < 2:
+                    continue
+                synthesis = await synthesize_cluster(arts_for_synthesis)
+                if synthesis:
+                    nc.title = synthesis.title
+                    nc.synthesis = synthesis.synthesis
+                    nc.key_facts = synthesis.key_facts
+                    nc.category = synthesis.category
+                    sa_by_slug = {sa.source_slug: sa for sa in synthesis.source_analyses}
+                    for ca in nc.articles:
+                        sa = sa_by_slug.get(ca.article.source.slug)
+                        if sa:
+                            ca.coverage_percentage = sa.coverage_percentage
+                            ca.emphasis = sa.emphasis
+                            ca.omissions = sa.omissions
+            await db.commit()
+
         logger.info("Pipeline complete")

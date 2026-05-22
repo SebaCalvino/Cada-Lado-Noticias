@@ -111,6 +111,24 @@ def _parse_response(raw: str, articles: List[ArticleForSynthesis]) -> Optional[S
     )
 
 
+async def _call_groq(prompt: str) -> str:
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
+            json={
+                "model": settings.GROQ_MODEL,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.3,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+
 async def _call_ollama(prompt: str) -> str:
     async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
@@ -147,7 +165,9 @@ async def synthesize_cluster(articles: List[ArticleForSynthesis]) -> Optional[Sy
     prompt = USER_PROMPT_TEMPLATE.format(articles=_format_articles(articles))
 
     try:
-        if settings.AI_PROVIDER == "ollama":
+        if settings.AI_PROVIDER == "groq":
+            raw = await _call_groq(prompt)
+        elif settings.AI_PROVIDER == "ollama":
             raw = await _call_ollama(prompt)
         else:
             raw = _call_anthropic(prompt)

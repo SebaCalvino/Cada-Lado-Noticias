@@ -3,8 +3,10 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    # IA: "anthropic" o "ollama"
-    AI_PROVIDER: str = "ollama"
+    # IA: "groq", "anthropic" o "ollama"
+    AI_PROVIDER: str = "groq"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     ANTHROPIC_API_KEY: str = ""
     OLLAMA_URL: str = "http://host.docker.internal:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"
