@@ -47,14 +47,14 @@ export default function HeroAnimated() {
       <div className="relative flex-1 flex flex-col justify-center max-w-6xl mx-auto px-4 py-16 md:py-24 w-full">
         {/* Live badge */}
         <div
-          className={`flex items-center gap-2 text-xs text-emerald-400 font-semibold mb-7 tracking-widest uppercase transition-all duration-700 ease-out ${
+          className={`flex items-center gap-2 text-xs font-semibold mb-7 tracking-widest uppercase transition-all duration-700 ease-out ${
             visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
           }`}
-          style={{ transitionDelay: '0ms' }}
+          style={{ transitionDelay: '0ms', color: '#3D85FF' }}
         >
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: '#3D85FF' }} />
+            <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: '#3D85FF' }} />
           </span>
           Monitoreo en tiempo real · 12 medios · Argentina
         </div>

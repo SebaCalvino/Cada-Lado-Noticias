@@ -97,6 +97,7 @@ async def get_news_detail(cluster_id: int, db: AsyncSession = Depends(get_db)):
             source_color=src.color,
             article_title=art.title,
             article_url=art.url,
+            article_image_url=art.image_url,
             coverage_percentage=ca.coverage_percentage,
             emphasis=ca.emphasis,
             omissions=ca.omissions,

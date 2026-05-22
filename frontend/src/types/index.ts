@@ -14,6 +14,7 @@ export interface ClusterArticle {
   source_color: string
   article_title: string
   article_url: string
+  article_image_url?: string | null
   coverage_percentage: number
   emphasis: string | null
   omissions: string | null

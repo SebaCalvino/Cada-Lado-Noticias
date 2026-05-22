@@ -22,6 +22,7 @@ class ClusterArticleSchema(BaseModel):
     source_color: str
     article_title: str
     article_url: str
+    article_image_url: Optional[str] = None
     coverage_percentage: float
     emphasis: Optional[str]
     omissions: Optional[str]
