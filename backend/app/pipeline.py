@@ -16,14 +16,18 @@ from app.scrapers.comments import get_all_cluster_comments
 logger = logging.getLogger(__name__)
 
 SOURCES_METADATA = {
-    "clarin":     {"name": "Clarín",      "url": "https://www.clarin.com",         "color": "#004B87", "ideology_score":  0.3, "ideology_label": "Centro-derecha"},
-    "lanacion":   {"name": "La Nación",   "url": "https://www.lanacion.com.ar",    "color": "#1A3A5C", "ideology_score":  0.6, "ideology_label": "Centro-derecha"},
-    "infobae":    {"name": "Infobae",     "url": "https://www.infobae.com",        "color": "#E30613", "ideology_score":  0.2, "ideology_label": "Centro"},
-    "pagina12":   {"name": "Página 12",   "url": "https://www.pagina12.com.ar",   "color": "#1A1A1A", "ideology_score": -0.7, "ideology_label": "Izquierda"},
-    "ambito":     {"name": "Ámbito",      "url": "https://www.ambito.com",         "color": "#FF6B00", "ideology_score":  0.1, "ideology_label": "Centro"},
-    "cronista":   {"name": "El Cronista", "url": "https://www.cronista.com",       "color": "#2C7BB6", "ideology_score":  0.2, "ideology_label": "Centro"},
-    "perfil":     {"name": "Perfil",      "url": "https://www.perfil.com",         "color": "#8B0000", "ideology_score": -0.1, "ideology_label": "Centro"},
-    "laizquierda":{"name": "La Izquierda Diario", "url": "https://www.laizquierdadiario.com", "color": "#CC0000", "ideology_score": -0.8, "ideology_label": "Izquierda"},
+    "clarin":      {"name": "Clarín",              "url": "https://www.clarin.com",              "color": "#004B87", "ideology_score":  0.3, "ideology_label": "Centro-derecha"},
+    "lanacion":    {"name": "La Nación",            "url": "https://www.lanacion.com.ar",         "color": "#1A3A5C", "ideology_score":  0.6, "ideology_label": "Centro-derecha"},
+    "infobae":     {"name": "Infobae",              "url": "https://www.infobae.com",             "color": "#E30613", "ideology_score":  0.2, "ideology_label": "Centro"},
+    "pagina12":    {"name": "Página 12",            "url": "https://www.pagina12.com.ar",         "color": "#1A1A1A", "ideology_score": -0.7, "ideology_label": "Izquierda"},
+    "ambito":      {"name": "Ámbito",               "url": "https://www.ambito.com",              "color": "#FF6B00", "ideology_score":  0.1, "ideology_label": "Centro"},
+    "cronista":    {"name": "El Cronista",          "url": "https://www.cronista.com",            "color": "#2C7BB6", "ideology_score":  0.2, "ideology_label": "Centro"},
+    "perfil":      {"name": "Perfil",               "url": "https://www.perfil.com",              "color": "#8B0000", "ideology_score": -0.1, "ideology_label": "Centro"},
+    "laizquierda": {"name": "La Izquierda Diario",  "url": "https://www.laizquierdadiario.com",   "color": "#CC0000", "ideology_score": -0.8, "ideology_label": "Izquierda"},
+    "tn":          {"name": "TN",                   "url": "https://tn.com.ar",                   "color": "#005BAC", "ideology_score":  0.2, "ideology_label": "Centro"},
+    "eldestape":   {"name": "El Destape",           "url": "https://www.eldestapeweb.com",        "color": "#e53e3e", "ideology_score": -0.5, "ideology_label": "Centro-izquierda"},
+    "mdzol":       {"name": "MDZ Online",           "url": "https://www.mdzol.com",               "color": "#0077b6", "ideology_score":  0.0, "ideology_label": "Centro"},
+    "minutouno":   {"name": "Minuto Uno",           "url": "https://www.minutouno.com",           "color": "#e67e22", "ideology_score": -0.2, "ideology_label": "Centro"},
 }
 
 
@@ -79,7 +83,7 @@ async def run_scraping_pipeline():
         logger.info(f"Scraped {new_count} new articles")
 
         # --- Cluster ALL unclustered articles from the last 24h ---
-        cutoff = datetime.utcnow() - timedelta(hours=24)
+        cutoff = datetime.utcnow() - timedelta(hours=48)
         recent_result = await db.execute(
             select(RawArticle)
             .options(selectinload(RawArticle.source))

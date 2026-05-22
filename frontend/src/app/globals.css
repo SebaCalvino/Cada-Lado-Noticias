@@ -30,3 +30,31 @@
     @apply bg-gray-900 hover:bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors;
   }
 }
+
+/* News ticker animation */
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker-track {
+  display: inline-block;
+  animation: ticker-scroll 55s linear infinite;
+  will-change: transform;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* Smooth transition durations not in Tailwind defaults */
+.duration-800 {
+  transition-duration: 800ms;
+}
+.duration-600 {
+  transition-duration: 600ms;
+}
