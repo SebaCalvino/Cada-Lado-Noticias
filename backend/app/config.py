@@ -3,11 +3,9 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    # IA: "groq", "anthropic" o "ollama"
     AI_PROVIDER: str = "groq"
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
-    ANTHROPIC_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
     OLLAMA_URL: str = "http://host.docker.internal:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"
 
@@ -16,6 +14,11 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
     CLUSTERING_THRESHOLD: float = 0.12
     ARTICLES_PER_SCRAPE: int = 30
+
+    # Cron endpoint secret — set en Vercel env vars
+    CRON_SECRET: str = ""
+    # En Vercel siempre False; en Docker local podés poner True
+    ENABLE_SCHEDULER: bool = False
 
     class Config:
         env_file = ".env"

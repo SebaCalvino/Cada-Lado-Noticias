@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import httpx
-import anthropic
 
 from app.config import settings
 
@@ -147,23 +146,12 @@ async def _call_ollama(prompt: str) -> str:
         return resp.json()["message"]["content"]
 
 
-def _call_anthropic(prompt: str) -> str:
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2048,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return message.content[0].text
-
-
 async def classify_comments(comments: list) -> dict:
     """
     Single Groq call. Takes all scraped comments as one array (with text + source_name).
     Returns {"positive": [indices], "negative": [indices]} — 3 of each max.
     """
-    if not comments or settings.AI_PROVIDER not in ("groq", "anthropic"):
+    if not comments or settings.AI_PROVIDER not in ("groq", "ollama"):
         return {"positive": [], "negative": []}
 
     numbered = "\n".join(
@@ -182,10 +170,10 @@ Respondé SOLO con JSON válido:
 Los números son los índices (empezando en 1). Si hay menos de 3 de algún tipo, devolvé los que haya."""
 
     try:
-        if settings.AI_PROVIDER == "groq":
-            raw = await _call_groq(prompt)
+        if settings.AI_PROVIDER == "ollama":
+            raw = await _call_ollama(prompt)
         else:
-            raw = _call_anthropic(prompt)
+            raw = await _call_groq(prompt)
         raw = raw.strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
@@ -203,12 +191,10 @@ async def synthesize_cluster(articles: List[ArticleForSynthesis]) -> Optional[Sy
     prompt = USER_PROMPT_TEMPLATE.format(articles=_format_articles(articles))
 
     try:
-        if settings.AI_PROVIDER == "groq":
-            raw = await _call_groq(prompt)
-        elif settings.AI_PROVIDER == "ollama":
+        if settings.AI_PROVIDER == "ollama":
             raw = await _call_ollama(prompt)
         else:
-            raw = _call_anthropic(prompt)
+            raw = await _call_groq(prompt)
 
         return _parse_response(raw, articles)
 
