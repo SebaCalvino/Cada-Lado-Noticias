@@ -97,6 +97,7 @@ async def get_news_detail(cluster_id: int, db: AsyncSession = Depends(get_db)):
             source_color=src.color,
             article_title=art.title,
             article_url=art.url,
+            article_image_url=art.image_url,
             coverage_percentage=ca.coverage_percentage,
             emphasis=ca.emphasis,
             omissions=ca.omissions,
@@ -141,6 +142,66 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
         .order_by(desc("count"))
     )
     return [{"category": row.category, "count": row.count} for row in result.all()]
+
+
+@router.get("/trending-topics")
+async def get_trending_topics(db: AsyncSession = Depends(get_db)):
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Query category counts for today's clusters
+    cat_result = await db.execute(
+        select(NewsCluster.category, func.count(NewsCluster.id).label("count"))
+        .where(NewsCluster.published_at >= today)
+        .where(NewsCluster.category.isnot(None))
+        .group_by(NewsCluster.category)
+    )
+    category_counts = {row.category: row.count for row in cat_result.all()}
+
+    # Fetch titles of today's clusters for keyword extraction
+    title_result = await db.execute(
+        select(NewsCluster.title)
+        .where(NewsCluster.published_at >= today)
+        .where(NewsCluster.title.isnot(None))
+    )
+    titles = [row.title for row in title_result.all()]
+
+    # Spanish stopwords to filter out
+    stopwords = {
+        "de", "la", "el", "en", "y", "a", "los", "las", "que", "del",
+        "con", "por", "se", "su", "una", "un", "al", "es", "lo", "no",
+        "para", "como", "más", "pero", "o", "fue", "ha", "le", "ya",
+    }
+
+    word_counts: dict = {}
+    for title in titles:
+        words = title.lower().split()
+        seen_in_title: set = set()
+        for word in words:
+            # Strip punctuation from word edges
+            cleaned = word.strip(".,;:!?\"'()[]{}—-")
+            if len(cleaned) > 2 and cleaned not in stopwords and cleaned not in seen_in_title:
+                word_counts[cleaned] = word_counts.get(cleaned, 0) + 1
+                seen_in_title.add(cleaned)
+
+    # Top 5 keywords with count >= 2
+    keyword_topics = sorted(
+        [(word, count) for word, count in word_counts.items() if count >= 2],
+        key=lambda x: x[1],
+        reverse=True,
+    )[:5]
+
+    # Build combined result
+    topics = []
+    for cat, count in category_counts.items():
+        topics.append({"topic": cat, "count": count, "category": True})
+    for word, count in keyword_topics:
+        # Skip if the word is already a category name (case-insensitive)
+        existing_cats = {t["topic"].lower() for t in topics}
+        if word.lower() not in existing_cats:
+            topics.append({"topic": word, "count": count, "category": False})
+
+    topics.sort(key=lambda x: x["count"], reverse=True)
+    return topics[:10]
 
 
 @router.get("/news/{cluster_id}/tweets", response_model=List[TweetSchema])

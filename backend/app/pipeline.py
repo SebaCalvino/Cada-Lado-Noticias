@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.database import AsyncSessionLocal
 from app.models import Source, RawArticle, NewsCluster, ClusterArticle, ClusterComment
 from app.scrapers import ALL_SCRAPERS
+from app.scrapers.base import fetch_og_image
 from app.clustering import ArticleInput, cluster_articles
 from app.ai_synthesis import ArticleForSynthesis, synthesize_cluster, classify_comments
 from app.scrapers.comments import get_all_cluster_comments
@@ -133,6 +134,15 @@ async def run_scraping_pipeline():
 
             image_url = next((id_to_article[aid].image_url for aid in cluster.article_ids if aid in id_to_article and id_to_article[aid].image_url), None)
 
+            # Garantizar imagen: si ningún artículo tiene una, buscar og:image
+            if not image_url:
+                for aid in cluster.article_ids:
+                    if aid in id_to_article:
+                        img = await fetch_og_image(id_to_article[aid].url)
+                        if img:
+                            image_url = img
+                            break
+
             news_cluster = NewsCluster(
                 title=synthesis.title,
                 synthesis=synthesis.synthesis,
@@ -238,6 +248,27 @@ async def run_scraping_pipeline():
                             ca.coverage_percentage = sa.coverage_percentage
                             ca.emphasis = sa.emphasis
                             ca.omissions = sa.omissions
+            await db.commit()
+
+        # Backfill: clusters existentes sin imagen — buscar og:image de sus artículos
+        no_image_result = await db.execute(
+            select(NewsCluster)
+            .options(
+                selectinload(NewsCluster.articles)
+                .selectinload(ClusterArticle.article)
+            )
+            .where(NewsCluster.image_url == None)
+            .limit(40)
+        )
+        no_image_clusters = no_image_result.scalars().all()
+        if no_image_clusters:
+            logger.info(f"Backfilling images for {len(no_image_clusters)} clusters")
+            for nc in no_image_clusters:
+                for ca in nc.articles:
+                    img = ca.article.image_url or await fetch_og_image(ca.article.url)
+                    if img:
+                        nc.image_url = img
+                        break
             await db.commit()
 
         logger.info("Pipeline complete")

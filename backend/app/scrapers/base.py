@@ -16,6 +16,62 @@ HEADERS = {
     )
 }
 
+# Headers de navegador real — algunos medios bloquean bots para el HTML completo
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "es-AR,es;q=0.9,en;q=0.6",
+}
+
+_IMG_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".avif")
+
+
+async def fetch_og_image(url: str) -> Optional[str]:
+    """
+    Extrae la imagen principal de un artículo desde su HTML.
+    Prioridad: og:image > twitter:image > link image_src > primer <img> grande.
+    Función módulo-nivel para que el pipeline pueda garantizar imágenes.
+    """
+    try:
+        async with httpx.AsyncClient(
+            headers=BROWSER_HEADERS, timeout=12, follow_redirects=True
+        ) as client:
+            resp = await client.get(url)
+        if resp.status_code != 200 or not resp.text:
+            return None
+
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(resp.text, "lxml")
+
+        # Meta tags estándar (og:image es la foto hero del artículo)
+        for prop in ("og:image", "og:image:url", "og:image:secure_url",
+                     "twitter:image", "twitter:image:src"):
+            tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+            if tag:
+                content = (tag.get("content") or "").strip()
+                if content.startswith("http"):
+                    return content
+
+        # link rel=image_src
+        link = soup.find("link", rel="image_src")
+        if link:
+            href = (link.get("href") or "").strip()
+            if href.startswith("http"):
+                return href
+
+        # Fallback: primer <img> con extensión de imagen real dentro del cuerpo
+        for img in soup.find_all("img"):
+            src = (img.get("src") or img.get("data-src") or "").strip()
+            if src.startswith("http") and any(e in src.lower() for e in _IMG_EXTS):
+                return src
+
+    except Exception as e:
+        logger.debug(f"og:image fetch failed for {url}: {e}")
+    return None
+
 
 @dataclass
 class ArticleData:
@@ -43,32 +99,18 @@ class BaseNewsScraper(ABC):
             return []
 
     async def _enrich_images(self, articles: List[ArticleData]) -> None:
-        """Fetch og:image for articles that have no image from RSS (parallel, max 8)."""
-        no_image = [a for a in articles if not a.image_url][:8]
+        """Fetch og:image for articles without an RSS image (parallel, in batches)."""
+        no_image = [a for a in articles if not a.image_url]
         if not no_image:
             return
-        tasks = [self._fetch_og_image(a.url) for a in no_image]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for art, img in zip(no_image, results):
-            if isinstance(img, str) and img:
-                art.image_url = img
-
-    @staticmethod
-    async def _fetch_og_image(url: str) -> Optional[str]:
-        try:
-            async with httpx.AsyncClient(headers=HEADERS, timeout=8, follow_redirects=True) as client:
-                resp = await client.get(url)
-            if resp.status_code != 200:
-                return None
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(resp.text, "lxml")
-            for attr in ("og:image", "twitter:image"):
-                tag = soup.find("meta", property=attr) or soup.find("meta", attrs={"name": attr})
-                if tag and tag.get("content", "").startswith("http"):
-                    return tag["content"]
-        except Exception:
-            pass
-        return None
+        # Procesar en lotes de 10 para no abrir demasiadas conexiones a la vez
+        for i in range(0, len(no_image), 10):
+            batch = no_image[i:i + 10]
+            tasks = [fetch_og_image(a.url) for a in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for art, img in zip(batch, results):
+                if isinstance(img, str) and img:
+                    art.image_url = img
 
     async def _fetch_from_rss(self) -> List[ArticleData]:
         async with httpx.AsyncClient(headers=HEADERS, timeout=20, follow_redirects=True) as client:

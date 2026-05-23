@@ -46,11 +46,7 @@ export default function HeroAnimated() {
   return (
     <section
       className="relative overflow-hidden flex flex-col border-b"
-      style={{
-        minHeight: '85vh',
-        background: 'var(--bg)',
-        borderColor: 'var(--line)',
-      }}
+      style={{ minHeight: '85vh', background: 'var(--bg)', borderColor: 'var(--line)' }}
     >
       {/* Date + edition line */}
       <div className="max-w-6xl mx-auto px-4 w-full pt-5">
@@ -73,7 +69,7 @@ export default function HeroAnimated() {
       {/* Main hero content */}
       <div className="flex-1 flex flex-col justify-center max-w-6xl mx-auto px-4 py-16 md:py-24 w-full">
 
-        {/* Live badge */}
+        {/* Live badge — azul */}
         <div
           className={`flex items-center gap-2 mb-8 transition-all duration-700 ease-out ${
             visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
@@ -84,14 +80,14 @@ export default function HeroAnimated() {
             fontFamily: 'var(--font-mono)',
             letterSpacing: '0.14em',
             textTransform: 'uppercase',
-            color: 'var(--ink-mute)',
+            color: '#3D85FF',
           }}
         >
           <span
             className="w-1.5 h-1.5 rounded-full inline-block"
-            style={{ background: 'var(--right)', animation: 'pulse 2.2s ease-in-out infinite' }}
+            style={{ background: '#3D85FF', animation: 'pulse 2.2s ease-in-out infinite' }}
           />
-          Monitoreo en tiempo real
+          Monitoreo en tiempo real · 12 medios · Argentina
         </div>
 
         {/* Rotating headline */}
@@ -116,7 +112,7 @@ export default function HeroAnimated() {
             }}
           >
             {phrase.pre}{' '}
-            <em style={{ fontStyle: 'italic', color: 'var(--cada-blue)' }}>{phrase.em}</em>
+            <em style={{ fontStyle: 'italic', color: '#0052CC' }}>{phrase.em}</em>
           </h1>
         </div>
 
@@ -141,14 +137,10 @@ export default function HeroAnimated() {
           <div className="flex flex-wrap gap-3">
             <Link
               href="/noticias"
-              className="flex items-center gap-2 transition-colors text-sm font-medium"
-              style={{
-                background: 'var(--ink)',
-                color: 'var(--bg)',
-                padding: '12px 24px',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--ink-2)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'var(--ink)')}
+              className="flex items-center gap-2 transition-colors text-sm font-semibold"
+              style={{ background: '#0052CC', color: '#fff', padding: '12px 24px' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#3D85FF')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#0052CC')}
             >
               Ver las noticias de hoy <ArrowRight size={15} />
             </Link>
@@ -175,11 +167,7 @@ export default function HeroAnimated() {
         className={`border-t transition-all duration-700 ease-out ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
-        style={{
-          borderColor: 'var(--line)',
-          transitionDelay: '600ms',
-          transitionDuration: '700ms',
-        }}
+        style={{ borderColor: 'var(--line)', transitionDelay: '600ms', transitionDuration: '700ms' }}
       >
         <div className="flex items-stretch overflow-hidden">
           <div
@@ -199,11 +187,7 @@ export default function HeroAnimated() {
           <div className="overflow-hidden flex-1 py-2.5">
             <div
               className="ticker-track whitespace-nowrap"
-              style={{
-                fontSize: 12,
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--ink-dim)',
-              }}
+              style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)' }}
             >
               {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
                 <span key={i} className="inline-block mx-10">

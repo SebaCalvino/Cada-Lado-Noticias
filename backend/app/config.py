@@ -1,5 +1,15 @@
 from pydantic_settings import BaseSettings
 from typing import List
+import os
+
+
+def _fix_db_url(url: str) -> str:
+    """Convert postgres:// or postgresql:// to postgresql+asyncpg:// for asyncpg driver."""
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
 
 
 class Settings(BaseSettings):
@@ -11,14 +21,30 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql+asyncpg://cadalado:cadalado@db:5432/cadalado"
     SECRET_KEY: str = "dev-secret-change-in-prod"
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+
+    BACKEND_CORS_ORIGINS: str = "*"
     CLUSTERING_THRESHOLD: float = 0.12
     ARTICLES_PER_SCRAPE: int = 30
 
-    # Cron endpoint secret — set en Vercel env vars
     CRON_SECRET: str = ""
-    # En Vercel siempre False; en Docker local podés poner True
     ENABLE_SCHEDULER: bool = False
+
+    @property
+    def database_url_async(self) -> str:
+        return _fix_db_url(self.DATABASE_URL)
+
+    @property
+    def cors_origins(self) -> List[str]:
+        raw = self.BACKEND_CORS_ORIGINS.strip()
+        if raw == "*":
+            return ["*"]
+        if raw.startswith("["):
+            import json
+            try:
+                return json.loads(raw)
+            except Exception:
+                pass
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
     class Config:
         env_file = ".env"

@@ -3,6 +3,7 @@ import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import { AuthProvider } from '@/context/AuthContext'
 
 // Titular editorial: Fraunces — serif variable con personalidad sin ser excesivo
 const fraunces = Fraunces({
@@ -33,8 +34,8 @@ export const metadata: Metadata = {
   description:
     'Compará cómo cada diario argentino cubre la misma noticia. Síntesis neutral + análisis de qué dice y qué omite cada medio.',
   icons: {
-    icon: '/CadaLadoLogoCL.svg',
-    apple: '/CadaLadoLogoCL.svg',
+    icon: '/images/logo-cl.svg',
+    apple: '/images/logo-cl.svg',
   },
   openGraph: {
     title: 'Cada Lado Noticias',
@@ -47,9 +48,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen flex flex-col">
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <AuthProvider>
+          <Header />
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   )

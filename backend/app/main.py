@@ -19,10 +19,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
+_cors = settings.cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=_cors,
+    allow_credentials="*" not in _cors,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -67,6 +68,12 @@ async def shutdown():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/wake")
+async def wake():
+    """Keep-alive endpoint for Render free tier — called by cron-job.org every 10 min."""
+    return {"status": "awake"}
 
 
 @app.post("/api/cron/pipeline")
