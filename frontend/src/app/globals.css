@@ -4,20 +4,55 @@
 
 @layer base {
   :root {
-    --font-serif-heading: 'Roboto Slab', Georgia, serif;
-    --font-sans-body: 'Inter', system-ui, sans-serif;
-    --cada-blue: #0052CC;
-    --cada-dark: #0F172A;
-    --cada-light: #F8FAFC;
+    /* Fonts */
+    --font-serif-heading: var(--font-fraunces), Georgia, 'Times New Roman', serif;
+    --font-sans-body: var(--font-sans-body), system-ui, sans-serif;
+    --font-mono: var(--font-mono), 'IBM Plex Mono', monospace;
+
+    /* Editorial surface palette */
+    --bg:         #faf8f3;
+    --surface:    #ffffff;
+    --surface-2:  #f4f1ea;
+    --surface-3:  #ece8dd;
+
+    /* Hairlines */
+    --line:       #e6e1d4;
+    --line-soft:  #efeae0;
+    --line-strong:#d4ccba;
+
+    /* Text */
+    --ink:        #1a1a1c;
+    --ink-2:      #2c2c2e;
+    --ink-dim:    #5c5a55;
+    --ink-mute:   #8e8a82;
+    --ink-faint:  #b8b3a8;
+
+    /* Ideology (only meaningful accent) */
+    --left:       #1e40af;
+    --left-bg:    #eef2fc;
+    --right:      #b1311c;
+    --right-bg:   #fbecea;
+    --center:     #6b6657;
+
+    /* Legacy */
+    --cada-blue:  #1e40af;
+    --cada-dark:  #1a1a1c;
+    --cada-light: #faf8f3;
   }
 
   html {
     scroll-behavior: smooth;
+    background: var(--bg);
   }
 
   body {
-    @apply bg-white text-cada-dark antialiased;
+    background: var(--bg);
+    color: var(--ink);
     font-family: var(--font-sans-body);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   h1, h2, h3, h4 {
@@ -25,38 +60,44 @@
   }
 
   ::selection {
-    background-color: #0052CC;
-    color: white;
+    background-color: var(--ink);
+    color: var(--bg);
   }
 
   *:focus-visible {
-    outline: 2px solid #0052CC;
+    outline: 2px solid var(--ink);
     outline-offset: 2px;
   }
 }
 
 @layer components {
   .source-badge {
-    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold text-white;
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-semibold text-white;
   }
 
   .card {
-    @apply bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow;
+    @apply bg-white border border-[#e6e1d4] hover:border-[#d4ccba] transition-colors;
   }
 
   .btn-primary {
-    @apply bg-gray-900 hover:bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors;
+    @apply bg-[#1a1a1c] hover:bg-[#2c2c2e] text-[#faf8f3] font-semibold px-5 py-2.5 transition-colors text-sm;
+  }
+
+  /* Mono label utility */
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 500;
   }
 }
 
 /* News ticker animation */
 @keyframes ticker-scroll {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
 .ticker-track {
@@ -69,10 +110,14 @@
   animation-play-state: paused;
 }
 
-/* Smooth transition durations not in Tailwind defaults */
-.duration-800 {
-  transition-duration: 800ms;
+/* Fade-in utility */
+@keyframes fadein {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.duration-600 {
-  transition-duration: 600ms;
-}
+
+.fade-in { animation: fadein 0.5s ease forwards; }
+
+/* Smooth transition durations */
+.duration-800 { transition-duration: 800ms; }
+.duration-600 { transition-duration: 600ms; }

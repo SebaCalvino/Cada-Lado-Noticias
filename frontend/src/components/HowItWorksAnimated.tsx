@@ -5,21 +5,21 @@ import { useEffect, useRef, useState } from 'react'
 const STEPS = [
   {
     step: '01',
-    title: 'Escaneamos el espectro completo',
-    desc: 'Cada hora, nuestros scrapers recorren Clarín, La Nación, Infobae, Página 12, Ámbito, El Cronista, Perfil y La Izquierda Diario. De la derecha a la izquierda, sin excluir ninguna voz.',
+    title: 'Monitoreamos todos los medios',
+    desc: 'Cada hora recorremos Clarín, La Nación, Infobae, Página 12, Ámbito, El Cronista, Perfil y La Izquierda Diario. De la derecha a la izquierda, sin excluir ninguna voz.',
     detail: '8 medios · actualización cada hora',
   },
   {
     step: '02',
-    title: 'La IA detecta el mismo hecho',
-    desc: 'Un modelo de lenguaje agrupa los artículos que hablan del mismo evento aunque los títulos sean completamente distintos. Clarín lo llama "crisis", Página 12 lo llama "saqueo"—nuestra IA los une.',
-    detail: 'Clustering semántico con embeddings',
+    title: 'Detectamos la misma noticia',
+    desc: 'Agrupamos automáticamente los artículos que cubren el mismo hecho aunque los títulos sean completamente distintos. Clarín lo llama "crisis", Página 12 lo llama "saqueo" — nosotros los unimos.',
+    detail: 'Detección automática del mismo hecho',
   },
   {
     step: '03',
-    title: 'Síntesis imparcial y análisis de sesgo',
-    desc: 'Claude AI redacta una síntesis neutra basada en los hechos verificables. Luego analiza qué enfatiza cada medio, qué datos aporta y—lo más revelador—qué omite deliberadamente.',
-    detail: 'Síntesis + análisis editorial por fuente',
+    title: 'Síntesis imparcial y comparación de coberturas',
+    desc: 'Generamos una síntesis neutra basada en los hechos verificables. Luego comparamos qué destaca cada medio, qué datos aporta y — lo más revelador — qué omite deliberadamente.',
+    detail: 'Síntesis neutral + cobertura comparada por fuente',
   },
 ]
 
