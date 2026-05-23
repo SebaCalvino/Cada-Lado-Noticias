@@ -2,10 +2,10 @@
  * Vercel automatically calls this on the schedule defined in vercel.json.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { runScrapingPipeline, backfillMissingImages } from '@/lib/pipeline'
+import { runScrapingPipeline } from '@/lib/pipeline'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 10   // Vercel Hobby plan limit
 
 export async function GET(req: NextRequest) {
   // Vercel Cron sends a special bearer token — when CRON_SECRET is set, verify it.
@@ -20,8 +20,7 @@ export async function GET(req: NextRequest) {
   console.log('Cron triggered: scraping pipeline')
   try {
     const result = await runScrapingPipeline()
-    const filledImages = await backfillMissingImages(15).catch(() => 0)
-    return NextResponse.json({ status: 'ok', ...result, backfilledImages: filledImages })
+    return NextResponse.json({ status: 'ok', ...result })
   } catch (e) {
     console.error('Cron pipeline failed:', e)
     return NextResponse.json({ status: 'error', message: (e as Error).message }, { status: 500 })

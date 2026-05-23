@@ -16,7 +16,7 @@ export interface ScrapedArticle {
 
 /* ── Parser ──────────────────────────────────────────────────────── */
 const parser = new Parser({
-  timeout: 15_000,
+  timeout: 7_000,
   headers: {
     'User-Agent': 'Mozilla/5.0 (compatible; CadaLadoBot/1.0; +https://cadalado.com.ar)',
     'Accept': 'application/rss+xml, application/xml, text/xml, */*',

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runScrapingPipeline } from '@/lib/pipeline'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60   // seconds (max for Vercel Hobby cron / regular fn on Pro)
+export const maxDuration = 10   // Vercel Hobby plan limit
 
 export async function POST(req: NextRequest) {
   // Optional CRON_SECRET protection

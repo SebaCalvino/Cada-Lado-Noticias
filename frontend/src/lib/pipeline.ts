@@ -1,13 +1,13 @@
 /* CADA LADO — Scrape → cluster → synthesize pipeline (orchestrator) */
 
-import { and, eq, gte, isNull, desc } from 'drizzle-orm'
+import { and, eq, gte, desc } from 'drizzle-orm'
 import { db } from './db'
 import {
   sources, rawArticles, newsClusters, clusterArticles,
   type NewRawArticle,
 } from './db/schema'
 import { SOURCES } from './sources'
-import { scrapeAllSources, enrichImages, fetchOgImage } from './scrapers'
+import { scrapeAllSources } from './scrapers'
 import { clusterArticles as runClustering, type ArticleInput } from './clustering'
 import { synthesizeCluster, type ArticleForSynthesis } from './ai-synthesis'
 
@@ -36,7 +36,7 @@ export async function ingestNewArticles(): Promise<number> {
   const idBySlug = new Map(allSources.map(s => [s.slug, s.id]))
 
   const scraped = await scrapeAllSources()
-  await enrichImages(scraped)
+  // enrichImages skipped — fetches full HTML per article, too slow for Vercel 10s limit
 
   let newCount = 0
   for (const art of scraped) {
@@ -121,15 +121,7 @@ export async function clusterAndSynthesize(maxClustersPerRun = 5): Promise<{ cre
       const r = idToRow.get(id)
       if (r?.imageUrl) { imageUrl = r.imageUrl; break }
     }
-    if (!imageUrl) {
-      for (const id of cluster.articleIds) {
-        const r = idToRow.get(id)
-        if (r) {
-          const img = await fetchOgImage(r.url, 6000)
-          if (img) { imageUrl = img; break }
-        }
-      }
-    }
+    // og:image fallback skipped — too slow for Vercel 10s limit
 
     const [nc] = await db.insert(newsClusters).values({
       title:        synth.title.slice(0, 500),
@@ -168,40 +160,6 @@ export async function clusterAndSynthesize(maxClustersPerRun = 5): Promise<{ cre
 /* ── Combined runner used by the cron endpoint ───────────────────── */
 export async function runScrapingPipeline(): Promise<{ scraped: number; clustersCreated: number }> {
   const scraped = await ingestNewArticles()
-  const { created } = await clusterAndSynthesize(5)
+  const { created } = await clusterAndSynthesize(1)
   return { scraped, clustersCreated: created }
-}
-
-/* ── Backfill helpers ────────────────────────────────────────────── */
-export async function backfillMissingImages(limit = 20): Promise<number> {
-  const missing = await db
-    .select({ id: newsClusters.id })
-    .from(newsClusters)
-    .where(isNull(newsClusters.imageUrl))
-    .limit(limit)
-
-  let filled = 0
-  for (const { id } of missing) {
-    const arts = await db
-      .select({ url: rawArticles.url, imageUrl: rawArticles.imageUrl })
-      .from(clusterArticles)
-      .innerJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
-      .where(eq(clusterArticles.clusterId, id))
-
-    let img: string | null = null
-    for (const a of arts) {
-      if (a.imageUrl) { img = a.imageUrl; break }
-    }
-    if (!img) {
-      for (const a of arts) {
-        img = await fetchOgImage(a.url, 6000)
-        if (img) break
-      }
-    }
-    if (img) {
-      await db.update(newsClusters).set({ imageUrl: img }).where(eq(newsClusters.id, id))
-      filled++
-    }
-  }
-  return filled
 }

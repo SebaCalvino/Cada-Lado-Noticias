@@ -1,28 +1,29 @@
-/* CADA LADO — Postgres + Drizzle connection (Supabase compatible) */
+/* CADA LADO — Postgres + Drizzle connection (lazy init for Vercel Hobby) */
 
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from './schema'
 
-const connectionString = process.env.DATABASE_URL
+type SQL = ReturnType<typeof postgres>
+type DB  = ReturnType<typeof drizzle<typeof schema>>
 
-if (!connectionString) {
-  throw new Error('DATABASE_URL is not set — set it to your Supabase connection string')
+const g = globalThis as unknown as { _caSql?: SQL; _caDb?: DB }
+
+function getClient(): DB {
+  if (g._caDb) return g._caDb
+  const url = process.env.DATABASE_URL
+  if (!url) throw new Error('DATABASE_URL is not set — add it in Vercel → Project Settings → Environment Variables')
+  g._caSql = postgres(url, { max: 1, prepare: false, idle_timeout: 20, connect_timeout: 10 })
+  g._caDb = drizzle(g._caSql, { schema })
+  return g._caDb
 }
 
-/* Single client per process (or warm Lambda) — Supabase pooler friendly */
-const globalForSql = globalThis as unknown as { _sql?: ReturnType<typeof postgres> }
-
-export const sql = globalForSql._sql ?? postgres(connectionString, {
-  max: 1,
-  prepare: false, // required for Supabase transaction pooler (port 6543)
-  idle_timeout: 20,
-  connect_timeout: 10,
+// Lazy proxy — only connects when first DB operation runs, not at import time
+export const db: DB = new Proxy({} as DB, {
+  get(_, prop) {
+    const client = getClient()
+    const val = Reflect.get(client, prop)
+    return typeof val === 'function' ? val.bind(client) : val
+  },
 })
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForSql._sql = sql
-}
-
-export const db = drizzle(sql, { schema })
 export { schema }
