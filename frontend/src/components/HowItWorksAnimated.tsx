@@ -50,24 +50,34 @@ export default function HowItWorksAnimated() {
   const { ref, inView } = useInView(0.1)
 
   return (
-    <section ref={ref} className="bg-[#070e1c] text-white py-24 md:py-32 overflow-hidden">
+    <section
+      ref={ref}
+      className="py-20 md:py-28 overflow-hidden"
+      style={{ background: 'var(--surface-2, #f4f1ea)', borderTop: '1px solid var(--line, #e6e1d4)', borderBottom: '1px solid var(--line, #e6e1d4)' }}
+    >
       <div className="max-w-6xl mx-auto px-4">
 
         {/* Header */}
         <div
-          className={`mb-16 transition-all duration-700 ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+          className={`mb-14 transition-all duration-700 ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
         >
-          <p className="text-[11px] font-bold uppercase tracking-[0.3em] mb-4" style={{ color: '#3D85FF' }}>
+          <p
+            className="font-bold uppercase mb-4"
+            style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.28em', color: '#0052CC' }}
+          >
             El proceso
           </p>
-          <h2 className="text-3xl md:text-5xl font-serif font-bold text-white leading-tight max-w-xl">
+          <h2
+            className="font-serif leading-tight max-w-xl"
+            style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 700, color: 'var(--ink, #1a1a1c)' }}
+          >
             ¿Cómo funciona?
           </h2>
-          <div className="mt-5 w-12 h-[3px]" style={{ background: '#3D85FF' }} />
+          <div className="mt-4 w-10 h-[2px]" style={{ background: '#0052CC' }} />
         </div>
 
         {/* Steps */}
-        <div className="grid md:grid-cols-3 gap-8 xl:gap-12">
+        <div className="grid md:grid-cols-3 gap-6 xl:gap-10">
           {STEPS.map((item, i) => {
             const Icon = item.icon
             return (
@@ -79,40 +89,54 @@ export default function HowItWorksAnimated() {
                 style={{ transitionDelay: `${i * 180 + 100}ms` }}
               >
                 <div
-                  className="h-full p-8 border border-white/[0.07] bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
+                  className="h-full p-7 bg-white border border-gray-200 hover:border-gray-300 transition-colors"
                   style={{ borderTop: `3px solid ${item.accent}` }}
                 >
-                  <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center justify-between mb-7">
                     <span
-                      className="text-6xl font-serif font-black leading-none select-none"
-                      style={{ color: item.accent, opacity: 0.18 }}
+                      className="font-serif font-black leading-none select-none"
+                      style={{ fontSize: 56, color: item.accent, opacity: 0.12 }}
                     >
                       {item.step}
                     </span>
                     <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: `${item.accent}22` }}
+                      className="w-11 h-11 rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: `${item.accent}14` }}
                     >
-                      <Icon size={22} style={{ color: item.accent }} />
+                      <Icon size={20} style={{ color: item.accent }} />
                     </div>
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-3 leading-snug">{item.title}</h3>
-                  <p className="text-[14px] text-gray-400 leading-relaxed mb-6">{item.desc}</p>
+                  <h3
+                    className="font-bold mb-2.5 leading-snug"
+                    style={{ fontSize: 16, color: 'var(--ink, #1a1a1c)' }}
+                  >
+                    {item.title}
+                  </h3>
+                  <p
+                    className="leading-relaxed mb-5"
+                    style={{ fontSize: 13, color: 'var(--ink-dim, #5c5a55)' }}
+                  >
+                    {item.desc}
+                  </p>
                   <span
-                    className="inline-block text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full"
+                    className="inline-block font-bold uppercase"
                     style={{
+                      fontSize: 9,
+                      fontFamily: 'var(--font-mono)',
+                      letterSpacing: '0.18em',
                       color: item.accent,
-                      backgroundColor: `${item.accent}18`,
-                      border: `1px solid ${item.accent}40`,
+                      backgroundColor: `${item.accent}10`,
+                      border: `1px solid ${item.accent}30`,
+                      padding: '4px 10px',
                     }}
                   >
                     {item.tag}
                   </span>
                 </div>
                 {i < STEPS.length - 1 && (
-                  <div className="hidden md:flex absolute top-1/2 -right-6 -translate-y-1/2 items-center z-10">
-                    <svg width="12" height="20" viewBox="0 0 12 20" fill="none">
-                      <path d="M1 1l10 9-10 9" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <div className="hidden md:flex absolute top-1/2 -right-5 -translate-y-1/2 items-center z-10">
+                    <svg width="10" height="18" viewBox="0 0 10 18" fill="none">
+                      <path d="M1 1l8 8-8 8" stroke="var(--line, #e6e1d4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   </div>
                 )}
