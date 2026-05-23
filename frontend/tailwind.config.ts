@@ -26,9 +26,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        serif: ['var(--font-serif-heading)', 'Georgia', 'serif'],
+        serif: ['var(--font-fraunces)', 'Georgia', 'serif'],
         sans:  ['var(--font-sans-body)', 'system-ui', 'sans-serif'],
-        mono:  ['JetBrains Mono', 'Fira Code', 'monospace'],
+        mono:  ['var(--font-mono)', 'IBM Plex Mono', 'monospace'],
       },
     },
   },

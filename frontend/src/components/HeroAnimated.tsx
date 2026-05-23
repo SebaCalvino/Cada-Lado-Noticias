@@ -4,6 +4,15 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 
+const PHRASES = [
+  { pre: 'Una noticia.',                        em: 'CADA LADO.' },
+  { pre: 'La misma noticia, desde',             em: 'CADA LADO.' },
+  { pre: 'Cómo cambia una noticia según',       em: 'CADA LADO.' },
+  { pre: 'Entendé la noticia desde',            em: 'CADA LADO.' },
+  { pre: 'Distintas versiones.',                em: 'CADA LADO.' },
+  { pre: 'Cada medio cuenta una historia. Mirá', em: 'CADA LADO.' },
+]
+
 const TICKER_ITEMS = [
   'Clarín destaca el impacto económico · La Nación focaliza en la reacción del mercado · Página 12 critica el ajuste',
   'Infobae prioriza la versión oficial · Perfil cuestiona los números · Ámbito analiza el impacto financiero',
@@ -13,69 +22,97 @@ const TICKER_ITEMS = [
 
 export default function HeroAnimated() {
   const [visible, setVisible] = useState(false)
-  const tickerRef = useRef<HTMLDivElement>(null)
+  const [phraseIdx, setPhraseIdx] = useState(0)
+  const [fade, setFade] = useState(true)
 
   useEffect(() => {
-    // Trigger entrance animation on mount
     const t = setTimeout(() => setVisible(true), 80)
     return () => clearTimeout(t)
   }, [])
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFade(false)
+      setTimeout(() => {
+        setPhraseIdx(i => (i + 1) % PHRASES.length)
+        setFade(true)
+      }, 350)
+    }, 4500)
+    return () => clearInterval(id)
+  }, [])
+
+  const phrase = PHRASES[phraseIdx]
+
   return (
-    <section className="bg-[#0b1120] text-white relative overflow-hidden min-h-[88vh] flex flex-col">
-      {/* Newspaper column grid lines — subtle */}
-      <div
-        className="absolute inset-0 opacity-[0.025] pointer-events-none"
-        style={{
-          backgroundImage:
-            'repeating-linear-gradient(90deg, rgba(255,255,255,0.8) 0px, rgba(255,255,255,0.8) 1px, transparent 1px, transparent 120px)',
-        }}
-      />
-
-      {/* Faint horizontal rule at top like a paper header */}
-      <div className="w-full h-px bg-white/10 mt-0" />
-
+    <section
+      className="relative overflow-hidden flex flex-col border-b"
+      style={{ minHeight: '85vh', background: 'var(--bg)', borderColor: 'var(--line)' }}
+    >
       {/* Date + edition line */}
-      <div className="relative max-w-6xl mx-auto px-4 w-full pt-5">
-        <div className="flex items-center justify-between text-[11px] text-gray-500 font-mono uppercase tracking-widest border-b border-white/10 pb-3">
+      <div className="max-w-6xl mx-auto px-4 w-full pt-5">
+        <div
+          className="flex items-center justify-between pb-3 border-b"
+          style={{
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: 'var(--ink-mute)',
+            borderColor: 'var(--line)',
+          }}
+        >
           <span>Buenos Aires, Argentina</span>
-          <span className="text-gray-600">Síntesis con IA · 12 medios monitoreados</span>
+          <span>12 medios monitoreados · actualizado hoy</span>
         </div>
       </div>
 
       {/* Main hero content */}
-      <div className="relative flex-1 flex flex-col justify-center max-w-6xl mx-auto px-4 py-16 md:py-24 w-full">
-        {/* Live badge */}
+      <div className="flex-1 flex flex-col justify-center max-w-6xl mx-auto px-4 py-16 md:py-24 w-full">
+
+        {/* Live badge — azul */}
         <div
-          className={`flex items-center gap-2 text-xs font-semibold mb-7 tracking-widest uppercase transition-all duration-700 ease-out ${
+          className={`flex items-center gap-2 mb-8 transition-all duration-700 ease-out ${
             visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
           }`}
-          style={{ transitionDelay: '0ms', color: '#3D85FF' }}
+          style={{
+            transitionDelay: '0ms',
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: '#3D85FF',
+          }}
         >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: '#3D85FF' }} />
-            <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: '#3D85FF' }} />
-          </span>
+          <span
+            className="w-1.5 h-1.5 rounded-full inline-block"
+            style={{ background: '#3D85FF', animation: 'pulse 2.2s ease-in-out infinite' }}
+          />
           Monitoreo en tiempo real · 12 medios · Argentina
         </div>
 
-        {/* Headline */}
+        {/* Rotating headline */}
         <div
-          className={`transition-all duration-800 ease-out ${
+          className={`transition-all duration-700 ease-out ${
             visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
           style={{ transitionDelay: '120ms', transitionDuration: '800ms' }}
         >
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold leading-[0.95] mb-0 text-white tracking-tight">
-            ¿Demasiada
-          </h1>
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold leading-[0.95] text-white tracking-tight">
-            desinformación?
-          </h1>
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold leading-[0.95] mt-1">
-            <span className="text-gray-400">Mirá lo que dice</span>
-            <br />
-            <span className="text-cada-blue-bright font-black not-italic uppercase tracking-tight">CADA LADO.</span>
+          <h1
+            style={{
+              fontFamily: 'var(--font-fraunces), Georgia, serif',
+              fontSize: 'clamp(52px, 7vw, 96px)',
+              fontWeight: 400,
+              lineHeight: 1.0,
+              letterSpacing: '-0.025em',
+              color: 'var(--ink)',
+              margin: 0,
+              opacity: fade ? 1 : 0,
+              transition: 'opacity 0.35s ease',
+              minHeight: '2.1em',
+            }}
+          >
+            {phrase.pre}{' '}
+            <em style={{ fontStyle: 'italic', color: '#0052CC' }}>{phrase.em}</em>
           </h1>
         </div>
 
@@ -86,21 +123,38 @@ export default function HeroAnimated() {
           }`}
           style={{ transitionDelay: '350ms', transitionDuration: '700ms' }}
         >
-          <p className="text-lg md:text-xl text-gray-400 mb-9 leading-relaxed">
-            La misma noticia, analizada desde Clarín hasta La Izquierda Diario.
-            Sintetizamos, comparamos y te mostramos qué enfatiza cada medio —
-            <span className="text-gray-300">y qué omite deliberadamente.</span>
+          <p
+            className="mb-9 leading-relaxed"
+            style={{
+              fontFamily: 'var(--font-fraunces), Georgia, serif',
+              fontSize: '18px',
+              color: 'var(--ink-dim)',
+            }}
+          >
+            La misma noticia contada de forma diferente según cada medio.
+            Comparamos titulares, énfasis y omisiones para que veas la historia completa.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link
               href="/noticias"
-              className="bg-cada-blue text-white font-bold px-7 py-3.5 flex items-center gap-2 hover:bg-cada-blue-bright transition-colors text-sm tracking-wide uppercase"
+              className="flex items-center gap-2 transition-colors text-sm font-semibold"
+              style={{ background: '#0052CC', color: '#fff', padding: '12px 24px' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#3D85FF')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#0052CC')}
             >
               Ver las noticias de hoy <ArrowRight size={15} />
             </Link>
             <Link
               href="/fuentes"
-              className="border border-white/20 text-gray-300 font-semibold px-7 py-3.5 hover:bg-white/5 transition-colors text-sm"
+              className="transition-colors text-sm font-medium"
+              style={{
+                border: '1px solid var(--line-strong)',
+                color: 'var(--ink-2)',
+                padding: '12px 24px',
+                background: 'var(--surface)',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
             >
               Conocer los medios
             </Link>
@@ -110,22 +164,34 @@ export default function HeroAnimated() {
 
       {/* News ticker at bottom */}
       <div
-        className={`relative border-t border-white/10 bg-white/[0.02] transition-all duration-700 ease-out ${
+        className={`border-t transition-all duration-700 ease-out ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
-        style={{ transitionDelay: '600ms', transitionDuration: '700ms' }}
+        style={{ borderColor: 'var(--line)', transitionDelay: '600ms', transitionDuration: '700ms' }}
       >
         <div className="flex items-stretch overflow-hidden">
-          {/* Label */}
-          <div className="shrink-0 bg-white text-gray-900 text-[10px] font-black uppercase tracking-widest px-3 flex items-center">
-            LIVE
+          <div
+            className="shrink-0 flex items-center px-4"
+            style={{
+              background: 'var(--ink)',
+              color: 'var(--bg)',
+              fontSize: 10,
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 600,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Última hora
           </div>
-          {/* Scrolling ticker */}
           <div className="overflow-hidden flex-1 py-2.5">
-            <div ref={tickerRef} className="ticker-track whitespace-nowrap text-xs text-gray-400 font-mono">
+            <div
+              className="ticker-track whitespace-nowrap"
+              style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)' }}
+            >
               {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
                 <span key={i} className="inline-block mx-10">
-                  <span className="text-gray-600 mr-2">·</span>
+                  <span style={{ color: 'var(--ink-faint)', marginRight: 8 }}>·</span>
                   {item}
                 </span>
               ))}

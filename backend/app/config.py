@@ -4,7 +4,7 @@ import os
 
 
 def _fix_db_url(url: str) -> str:
-    """Railway injects postgres:// or postgresql:// — convert to asyncpg driver format."""
+    """Convert postgres:// or postgresql:// to postgresql+asyncpg:// for asyncpg driver."""
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
@@ -15,18 +15,22 @@ def _fix_db_url(url: str) -> str:
 class Settings(BaseSettings):
     AI_PROVIDER: str = "groq"
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
-    ANTHROPIC_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
     OLLAMA_URL: str = "http://host.docker.internal:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"
 
     DATABASE_URL: str = "postgresql+asyncpg://cadalado:cadalado@db:5432/cadalado"
-
     SECRET_KEY: str = "dev-secret-change-in-prod"
-    # Accept comma-separated or JSON list — Railway sets this as a simple string
+
+    # CORS: acepta "*", lista separada por comas, o JSON array
     BACKEND_CORS_ORIGINS: str = "*"
     CLUSTERING_THRESHOLD: float = 0.12
     ARTICLES_PER_SCRAPE: int = 30
+
+    # Cron endpoint secret — set en producción
+    CRON_SECRET: str = ""
+    # En Vercel/Render sin proceso persistente: False. En Docker: True
+    ENABLE_SCHEDULER: bool = False
 
     @property
     def database_url_async(self) -> str:
