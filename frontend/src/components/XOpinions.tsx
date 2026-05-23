@@ -56,7 +56,7 @@ export default function XOpinions({ clusterId }: { clusterId: number }) {
         </svg>
         <h2 className="font-serif font-bold text-2xl text-gray-900">Voces en X</h2>
         <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-medium">
-          últimas 72h
+          últimas 24h
         </span>
       </div>
 

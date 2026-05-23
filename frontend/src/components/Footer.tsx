@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { Instagram, Facebook, Twitter, Youtube, Send } from 'lucide-react'
+import { Instagram, Facebook, Twitter, Youtube, Send, Github, Linkedin } from 'lucide-react'
 import { getNews } from '@/lib/api'
 
 export default async function Footer() {
@@ -70,12 +70,32 @@ export default async function Footer() {
                 { Icon: Twitter, href: '#', label: 'X/Twitter' },
                 { Icon: Youtube, href: '#', label: 'YouTube' },
                 { Icon: Send, href: '#', label: 'Telegram' },
+                { Icon: Github, href: 'https://github.com/Arkhram-Organization/Cada-Lado-Noticias', label: 'GitHub' },
               ].map(({ Icon, href, label }) => (
-                <a key={label} href={href} aria-label={label}
+                <a key={label} href={href} target={href.startsWith('http') ? '_blank' : undefined}
+                  rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                  aria-label={label}
                   className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
                   <Icon size={14} />
                 </a>
               ))}
+            </div>
+
+            {/* Equipo */}
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-2.5 font-semibold">Equipo</p>
+              <div className="space-y-2">
+                {[
+                  { name: 'Theo Trosman', href: 'https://www.linkedin.com/in/theotrosman/' },
+                  { name: 'Sebastián Calviño', href: 'https://www.linkedin.com/in/sebasti%C3%A1n-calvi%C3%B1o-99073b302/' },
+                ].map(({ name, href }) => (
+                  <a key={name} href={href} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
+                    <Linkedin size={13} className="shrink-0 opacity-60" />
+                    {name}
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
 

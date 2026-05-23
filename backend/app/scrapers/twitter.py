@@ -1,7 +1,7 @@
 """
 Busca tweets recientes SOBRE una noticia específica vía Nitter search RSS.
 No usa timelines de usuarios fijos — busca por el evento concreto del cluster.
-Solo retorna resultados si son genuinamente relevantes y recientes (< 72h).
+Solo retorna resultados si son genuinamente relevantes y recientes (< 24h).
 """
 import logging
 import re
@@ -96,7 +96,7 @@ def _relevance(text: str, keywords: List[str]) -> float:
 
 async def _search_nitter(query: str) -> List[ScrapedTweet]:
     encoded = urllib.parse.quote(query)
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
 
     for instance in NITTER_INSTANCES:
         try:

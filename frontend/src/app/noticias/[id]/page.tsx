@@ -7,6 +7,7 @@ import { timeAgo } from '@/lib/utils'
 import CoverageBar from '@/components/CoverageBar'
 import CommentsSection from '@/components/CommentsSection'
 import XOpinions from '@/components/XOpinions'
+import MediaStatsChart from '@/components/MediaStatsChart'
 
 export const dynamic = 'force-dynamic'
 
@@ -236,6 +237,11 @@ export default async function NoticiaDetailPage({ params }: Props) {
                   })}
                 </div>
               </article>
+            )}
+
+            {/* Stats charts — neutral, all cards on the table */}
+            {cluster.articles.length > 0 && (
+              <MediaStatsChart articles={cluster.articles} />
             )}
 
             {/* X opinions - client component, loads asynchronously */}
