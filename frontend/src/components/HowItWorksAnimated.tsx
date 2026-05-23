@@ -7,25 +7,25 @@ const STEPS = [
   {
     step: '01',
     icon: ScanSearch,
-    title: 'Escaneamos el espectro completo',
-    desc: 'Cada 30 minutos, nuestros scrapers recorren 12 medios argentinos — de Clarín a La Izquierda Diario. Sin excluir ninguna voz del debate.',
-    tag: '12 medios · cada 30 min',
+    title: 'Monitoreamos todos los medios',
+    desc: 'Cada hora recorremos Clarín, La Nación, Infobae, Página 12, Ámbito, El Cronista, Perfil, TN, La Izquierda Diario y más. De la derecha a la izquierda, sin excluir ninguna voz.',
+    tag: '12 medios · cada hora',
     accent: '#3D85FF',
   },
   {
     step: '02',
     icon: BrainCircuit,
-    title: 'La IA detecta el mismo hecho',
-    desc: 'Un modelo semántico agrupa artículos que hablan del mismo evento aunque tengan títulos distintos. Clarín dice "crisis", Página 12 dice "saqueo" — nuestra IA los une.',
-    tag: 'Clustering semántico',
+    title: 'Detectamos la misma noticia',
+    desc: 'Agrupamos automáticamente los artículos que cubren el mismo hecho aunque los títulos sean completamente distintos. Clarín lo llama "crisis", Página 12 lo llama "saqueo" — nosotros los unimos.',
+    tag: 'Detección automática',
     accent: '#7C3AED',
   },
   {
     step: '03',
     icon: Newspaper,
-    title: 'Síntesis neutra + análisis de sesgo',
-    desc: 'Groq AI redacta una síntesis imparcial basada en hechos verificables y revela qué enfatiza cada medio y — lo más revelador — qué omite deliberadamente.',
-    tag: 'Síntesis + análisis editorial',
+    title: 'Síntesis imparcial y comparación',
+    desc: 'Generamos una síntesis neutra basada en hechos verificables. Luego comparamos qué destaca cada medio, qué datos aporta y — lo más revelador — qué omite deliberadamente.',
+    tag: 'Síntesis neutral + cobertura comparada',
     accent: '#059669',
   },
 ]
@@ -57,13 +57,13 @@ export default function HowItWorksAnimated() {
         <div
           className={`mb-16 transition-all duration-700 ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
         >
-          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#3D85FF] mb-4">
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] mb-4" style={{ color: '#3D85FF' }}>
             El proceso
           </p>
           <h2 className="text-3xl md:text-5xl font-serif font-bold text-white leading-tight max-w-xl">
             ¿Cómo funciona?
           </h2>
-          <div className="mt-5 w-12 h-[3px] bg-[#3D85FF]" />
+          <div className="mt-5 w-12 h-[3px]" style={{ background: '#3D85FF' }} />
         </div>
 
         {/* Steps */}
@@ -78,12 +78,10 @@ export default function HowItWorksAnimated() {
                 }`}
                 style={{ transitionDelay: `${i * 180 + 100}ms` }}
               >
-                {/* Card */}
                 <div
                   className="h-full p-8 border border-white/[0.07] bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
                   style={{ borderTop: `3px solid ${item.accent}` }}
                 >
-                  {/* Step + Icon row */}
                   <div className="flex items-center justify-between mb-8">
                     <span
                       className="text-6xl font-serif font-black leading-none select-none"
@@ -98,16 +96,8 @@ export default function HowItWorksAnimated() {
                       <Icon size={22} style={{ color: item.accent }} />
                     </div>
                   </div>
-
-                  {/* Content */}
-                  <h3 className="text-lg font-bold text-white mb-3 leading-snug">
-                    {item.title}
-                  </h3>
-                  <p className="text-[14px] text-gray-400 leading-relaxed mb-6">
-                    {item.desc}
-                  </p>
-
-                  {/* Tag */}
+                  <h3 className="text-lg font-bold text-white mb-3 leading-snug">{item.title}</h3>
+                  <p className="text-[14px] text-gray-400 leading-relaxed mb-6">{item.desc}</p>
                   <span
                     className="inline-block text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full"
                     style={{
@@ -119,8 +109,6 @@ export default function HowItWorksAnimated() {
                     {item.tag}
                   </span>
                 </div>
-
-                {/* Connector arrow (desktop) */}
                 {i < STEPS.length - 1 && (
                   <div className="hidden md:flex absolute top-1/2 -right-6 -translate-y-1/2 items-center z-10">
                     <svg width="12" height="20" viewBox="0 0 12 20" fill="none">

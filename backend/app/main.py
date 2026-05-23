@@ -1,14 +1,13 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.config import settings
 from app.database import init_db, engine
 from app.api.routes import router
-from app.scheduler import create_scheduler
-from app.pipeline import ensure_sources
+from app.pipeline import ensure_sources, run_scraping_pipeline
 from app.database import AsyncSessionLocal
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -31,7 +30,9 @@ app.add_middleware(
 
 app.include_router(router, prefix="/api")
 
-scheduler = create_scheduler()
+if settings.ENABLE_SCHEDULER:
+    from app.scheduler import create_scheduler
+    scheduler = create_scheduler()
 
 
 @app.on_event("startup")
@@ -53,13 +54,15 @@ async def startup():
         )"""))
     async with AsyncSessionLocal() as db:
         await ensure_sources(db)
-    scheduler.start()
-    logger.info("Scheduler started")
+    if settings.ENABLE_SCHEDULER:
+        scheduler.start()
+        logger.info("Scheduler started")
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    scheduler.shutdown()
+    if settings.ENABLE_SCHEDULER:
+        scheduler.shutdown()
 
 
 @app.get("/health")
@@ -71,3 +74,12 @@ async def health():
 async def wake():
     """Keep-alive endpoint for Render free tier — called by cron-job.org every 10 min."""
     return {"status": "awake"}
+
+
+@app.post("/api/cron/pipeline")
+async def cron_pipeline(x_cron_secret: str = Header(default="")):
+    if settings.CRON_SECRET and x_cron_secret != settings.CRON_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    logger.info("Cron triggered: running scraping pipeline")
+    await run_scraping_pipeline()
+    return {"status": "ok"}

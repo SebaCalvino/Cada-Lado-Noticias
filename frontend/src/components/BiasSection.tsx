@@ -49,26 +49,27 @@ export default function BiasSection() {
   const { ref, inView } = useInView(0.15)
 
   return (
-    <section ref={ref} className="bg-[#0b1120] text-white overflow-hidden">
-      {/* Top border rule */}
-      <div className="h-px w-full bg-white/10" />
-
+    <section
+      ref={ref}
+      className="overflow-hidden border-b"
+      style={{ background: 'var(--surface-2)', borderColor: 'var(--line)' }}
+    >
       <div className="max-w-6xl mx-auto px-4 py-20 md:py-28">
         {/* Section label */}
         <div
           className={`transition-all duration-700 ease-out ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
           style={{ transitionDelay: '0ms' }}
         >
-          <p className="text-xs uppercase tracking-widest text-gray-500 font-semibold mb-4">
-            El problema
+          <p style={{ fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', fontWeight: 500, marginBottom: 16 }}>
+            El mismo hecho, dos versiones
           </p>
-          <h2 className="text-3xl md:text-5xl font-serif font-bold text-white leading-tight max-w-3xl mb-4">
-            El mismo hecho.
+          <h2 className="text-3xl md:text-5xl font-serif leading-tight max-w-3xl mb-4" style={{ color: 'var(--ink)', fontWeight: 400 }}>
+            La misma noticia.
             <br />
-            <span className="text-gray-400 italic">Dos realidades paralelas.</span>
+            <em className="italic" style={{ color: 'var(--ink-dim)' }}>Contada de formas muy distintas.</em>
           </h2>
-          <p className="text-gray-400 text-lg max-w-2xl leading-relaxed mb-16">
-            Los medios no inventan la noticia — la eligen, la encuadran y la amplifican de formas radicalmente distintas.
+          <p className="text-lg max-w-2xl leading-relaxed mb-16" style={{ color: 'var(--ink-dim)', fontFamily: 'var(--font-fraunces), Georgia, serif' }}>
+            Los medios no inventan la noticia — la encuadran y la amplifican de formas radicalmente distintas.
             Ese encuadre forma tu opinión sin que lo notes.
           </p>
         </div>
@@ -78,11 +79,11 @@ export default function BiasSection() {
           className={`transition-all duration-700 ease-out ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
           style={{ transitionDelay: '150ms' }}
         >
-          <div className="border border-white/10 bg-white/[0.03] rounded-sm px-6 py-4 mb-8 flex items-start gap-4">
-            <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold shrink-0 pt-0.5">
+          <div className="px-6 py-4 mb-8 flex items-start gap-4" style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', fontWeight: 600, flexShrink: 0, paddingTop: 2 }}>
               El hecho
             </span>
-            <p className="text-white/90 font-serif text-base md:text-lg leading-snug">
+            <p className="font-serif text-base md:text-lg leading-snug" style={{ color: 'var(--ink)' }}>
               {EXAMPLE.event}
             </p>
           </div>
@@ -94,82 +95,80 @@ export default function BiasSection() {
           style={{ transitionDelay: '280ms' }}
         >
           {/* Left side */}
-          <div className="border border-white/10 border-r-0 md:border-r-0 p-6 md:p-8 relative group hover:bg-white/[0.03] transition-colors">
-            {/* Ideology accent bar */}
-            <div
-              className="absolute left-0 top-0 bottom-0 w-1"
-              style={{ backgroundColor: EXAMPLE.left.color }}
-            />
+          <div
+            className="p-6 md:p-8 relative transition-colors border border-r-0"
+            style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
+          >
+            <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: EXAMPLE.left.color }} />
             <div className="pl-4">
               <div className="flex items-center gap-2 mb-5">
                 <span
-                  className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5"
-                  style={{ backgroundColor: EXAMPLE.left.color + '20', color: EXAMPLE.left.color }}
+                  className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5"
+                  style={{ background: EXAMPLE.left.color + '18', color: EXAMPLE.left.color }}
                 >
                   {EXAMPLE.left.ideologyLabel}
                 </span>
-                <span className="text-xs text-gray-500 font-semibold">
+                <span className="text-xs font-semibold" style={{ color: 'var(--ink-mute)' }}>
                   {EXAMPLE.left.source}
                 </span>
               </div>
-              <blockquote className="font-serif text-lg md:text-xl text-white leading-snug mb-6 italic">
+              <blockquote className="font-serif text-lg md:text-xl leading-snug mb-6 italic" style={{ color: 'var(--ink)' }}>
                 {EXAMPLE.left.headline}
               </blockquote>
               <div className="space-y-3 text-sm">
                 <div>
-                  <span className="text-gray-500 uppercase tracking-wider text-[10px] font-bold block mb-1">
-                    Énfasis
+                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                    Lo que destaca
                   </span>
-                  <p className="text-gray-300">{EXAMPLE.left.emphasis}</p>
+                  <p style={{ color: 'var(--ink-2)' }}>{EXAMPLE.left.emphasis}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500 uppercase tracking-wider text-[10px] font-bold block mb-1">
-                    Omite
+                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--right)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                    Lo que omite
                   </span>
-                  <p className="text-gray-500 italic">{EXAMPLE.left.omits}</p>
+                  <p className="italic" style={{ color: 'var(--ink-mute)' }}>{EXAMPLE.left.omits}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Divider with VS */}
-          <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
-            {/* this is handled by the border below on mobile */}
-          </div>
-
           {/* Right side */}
-          <div className="border border-white/10 border-t-0 md:border-t md:border-l-0 p-6 md:p-8 relative group hover:bg-white/[0.03] transition-colors">
-            <div
-              className="absolute left-0 top-0 bottom-0 w-1"
-              style={{ backgroundColor: EXAMPLE.right.color }}
-            />
+          <div
+            className="p-6 md:p-8 relative transition-colors border border-t-0 md:border-t md:border-l-0"
+            style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
+          >
+            <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: EXAMPLE.right.color }} />
             <div className="pl-4">
               <div className="flex items-center gap-2 mb-5">
                 <span
-                  className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5"
-                  style={{ backgroundColor: EXAMPLE.right.color + '20', color: EXAMPLE.right.color }}
+                  className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5"
+                  style={{ background: EXAMPLE.right.color + '18', color: EXAMPLE.right.color }}
                 >
                   {EXAMPLE.right.ideologyLabel}
                 </span>
-                <span className="text-xs text-gray-500 font-semibold">
+                <span className="text-xs font-semibold" style={{ color: 'var(--ink-mute)' }}>
                   {EXAMPLE.right.source}
                 </span>
               </div>
-              <blockquote className="font-serif text-lg md:text-xl text-white leading-snug mb-6 italic">
+              <blockquote className="font-serif text-lg md:text-xl leading-snug mb-6 italic" style={{ color: 'var(--ink)' }}>
                 {EXAMPLE.right.headline}
               </blockquote>
               <div className="space-y-3 text-sm">
                 <div>
-                  <span className="text-gray-500 uppercase tracking-wider text-[10px] font-bold block mb-1">
-                    Énfasis
+                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                    Lo que destaca
                   </span>
-                  <p className="text-gray-300">{EXAMPLE.right.emphasis}</p>
+                  <p style={{ color: 'var(--ink-2)' }}>{EXAMPLE.right.emphasis}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500 uppercase tracking-wider text-[10px] font-bold block mb-1">
-                    Omite
+                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--right)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                    Lo que omite
                   </span>
-                  <p className="text-gray-500 italic">{EXAMPLE.right.omits}</p>
+                  <p className="italic" style={{ color: 'var(--ink-mute)' }}>{EXAMPLE.right.omits}</p>
                 </div>
               </div>
             </div>
@@ -181,14 +180,12 @@ export default function BiasSection() {
           className={`mt-10 transition-all duration-700 ease-out ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
           style={{ transitionDelay: '450ms' }}
         >
-          <p className="text-gray-500 text-sm text-center max-w-xl mx-auto leading-relaxed">
+          <p className="text-sm text-center max-w-xl mx-auto leading-relaxed" style={{ color: 'var(--ink-mute)' }}>
             Cada Lado reúne todas las versiones del mismo hecho para que puedas leerlas juntas
             y formar tu propia opinión.
           </p>
         </div>
       </div>
-
-      <div className="h-px w-full bg-white/10" />
     </section>
   )
 }

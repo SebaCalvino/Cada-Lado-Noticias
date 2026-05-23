@@ -33,24 +33,25 @@ export default async function HomePage() {
       <BiasSection />
 
       {/* How it works — stagger on scroll */}
-      <div className="bg-gray-50 border-b border-gray-100">
+      <div style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--line)' }}>
         <HowItWorksAnimated />
       </div>
 
       {/* Latest news */}
       <section className="max-w-6xl mx-auto px-4 py-16">
-        <div className="flex items-end justify-between mb-10 border-b border-gray-200 pb-4">
+        <div className="flex items-end justify-between mb-10 pb-4" style={{ borderBottom: '1px solid var(--ink)' }}>
           <div>
-            <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold mb-1">
+            <p style={{ fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', fontWeight: 500, marginBottom: 8 }}>
               Hoy en los medios
             </p>
-            <h2 className="text-2xl md:text-3xl font-serif font-bold text-gray-900">
+            <h2 className="text-2xl md:text-3xl font-serif" style={{ color: 'var(--ink)', fontWeight: 400 }}>
               Últimas noticias
             </h2>
           </div>
           <Link
             href="/noticias"
-            className="text-sm font-semibold text-gray-700 hover:text-gray-900 flex items-center gap-1 pb-1 border-b border-gray-400 hover:border-gray-900 transition-colors"
+            className="text-sm font-semibold flex items-center gap-1 pb-1 transition-colors"
+            style={{ color: 'var(--ink-dim)', borderBottom: '1px solid var(--line-strong)' }}
           >
             Ver todas <ArrowRight size={13} />
           </Link>
