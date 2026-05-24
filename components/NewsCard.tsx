@@ -28,10 +28,13 @@ export default function NewsCard({ cluster, featured = false }: Props) {
   return (
     <Link href={`/noticias/${cluster.id}`} className="block group h-full">
       <article
-        className="bg-white border border-gray-200 h-full flex flex-col overflow-hidden
-          hover:border-cada-blue hover:shadow-xl hover:scale-[1.01] active:scale-[0.99]
-          transition-all duration-200 ease-out"
-        style={{ borderRadius: '2px' }}
+        className="h-full flex flex-col overflow-hidden transition-colors duration-200"
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
+          borderRadius: 0,
+        }}
+        // CSS :hover isn't possible inline — the group-hover classes handle hover state
       >
         {/* Image or category accent bar */}
         {hasImage ? (
@@ -39,28 +42,39 @@ export default function NewsCard({ cluster, featured = false }: Props) {
             <img
               src={cluster.image_url!}
               alt=""
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
               onError={(e) => {
                 const el = e.currentTarget as HTMLImageElement
                 el.style.display = 'none'
                 const parent = el.parentElement
                 if (parent) {
-                  parent.style.height = '4px'
+                  parent.style.height = '3px'
                   parent.style.backgroundColor = categoryColor
                 }
               }}
             />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors duration-200" />
           </div>
         ) : (
-          <div className="h-1 w-full" style={{ backgroundColor: categoryColor }} />
+          <div className="w-full" style={{ height: 3, backgroundColor: categoryColor }} />
         )}
 
         {/* Featured label */}
         {featured && (
           <div className="px-5 pt-4">
-            <span className="inline-block text-[10px] font-black uppercase tracking-widest bg-cada-blue text-white px-2.5 py-1">
-              PRINCIPAL
+            <span
+              style={{
+                display: 'inline-block',
+                fontSize: 10,
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 700,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                background: 'var(--ink)',
+                color: 'var(--bg)',
+                padding: '3px 10px',
+              }}
+            >
+              Principal
             </span>
           </div>
         )}
@@ -69,14 +83,23 @@ export default function NewsCard({ cluster, featured = false }: Props) {
         <div className={`px-5 ${featured ? 'pt-3' : 'pt-4'} flex items-start justify-between gap-3`}>
           {cluster.category && (
             <span
-              className="text-[11px] font-bold uppercase tracking-widest"
-              style={{ color: categoryColor }}
+              style={{
+                fontSize: 10,
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 700,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: categoryColor,
+              }}
             >
               {cluster.category}
             </span>
           )}
-          <div className="flex items-center gap-1 text-xs text-gray-400 shrink-0 ml-auto">
-            <Clock size={11} />
+          <div
+            className="flex items-center gap-1 shrink-0 ml-auto"
+            style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--font-mono)' }}
+          >
+            <Clock size={10} />
             {timeAgo(cluster.published_at)}
           </div>
         </div>
@@ -84,11 +107,15 @@ export default function NewsCard({ cluster, featured = false }: Props) {
         {/* Title */}
         <div className={`px-5 pt-2 ${featured ? 'pb-2' : ''}`}>
           <h2
-            className={`font-serif font-bold text-cada-dark leading-snug group-hover:text-cada-blue transition-colors duration-150 ${
+            className={`font-serif leading-snug transition-colors duration-150 ${
               featured ? 'text-2xl md:text-3xl line-clamp-4' : 'text-[17px] line-clamp-3'
             }`}
+            style={{ color: 'var(--ink)', fontWeight: 600 }}
           >
-            {cluster.title}
+            {/* Title underline on hover — done via CSS in globals */}
+            <span className="group-hover:text-[var(--cada-blue)] transition-colors duration-150">
+              {cluster.title}
+            </span>
           </h2>
         </div>
 
@@ -96,9 +123,8 @@ export default function NewsCard({ cluster, featured = false }: Props) {
         {cluster.synthesis && (
           <div className="px-5 pt-2 flex-1">
             <p
-              className={`text-sm text-gray-500 leading-relaxed ${
-                featured ? 'line-clamp-4' : 'line-clamp-2'
-              }`}
+              className={`leading-relaxed ${featured ? 'line-clamp-4' : 'line-clamp-2'}`}
+              style={{ fontSize: 13, color: 'var(--ink-dim)' }}
             >
               {cluster.synthesis}
             </p>
@@ -106,14 +132,18 @@ export default function NewsCard({ cluster, featured = false }: Props) {
         )}
 
         {/* Footer */}
-        <div className="px-5 pb-4 pt-3 flex items-center justify-between border-t border-gray-100 mt-auto">
+        <div
+          className="px-5 pb-4 pt-3 flex items-center justify-between mt-auto"
+          style={{ borderTop: '1px solid var(--line-soft)' }}
+        >
           <SourceDots sources={cluster.sources} />
           <div className="flex items-center gap-2 shrink-0 ml-2">
-            <span className="text-xs text-gray-400 font-medium">
+            <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--font-mono)' }}>
               {cluster.source_count} {cluster.source_count === 1 ? 'medio' : 'medios'}
             </span>
             <span
-              className="text-cada-blue font-bold text-sm translate-x-0 group-hover:translate-x-1.5 transition-transform duration-150"
+              className="translate-x-0 group-hover:translate-x-1.5 transition-transform duration-150"
+              style={{ color: 'var(--cada-blue)', fontWeight: 700, fontSize: 14 }}
               aria-hidden="true"
             >
               →
