@@ -17,7 +17,7 @@ import { waitUntil } from '@vercel/functions'
 import { runCluster } from '@/lib/pipeline'
 
 export const runtime     = 'nodejs'
-export const maxDuration = 90
+export const maxDuration = 300   // Vercel Pro — AI clustering can take 2-3 min on large batches
 
 function checkAuth(req: NextRequest): boolean {
   if (!process.env.CRON_SECRET) return true
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   waitUntil(synthFetch)
 
   try {
-    const { clustersCreated, singletons } = await runCluster(80)
+    const { clustersCreated, singletons } = await runCluster(40)
     const clusterMs = Date.now() - t0
 
     console.log(
