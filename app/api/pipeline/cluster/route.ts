@@ -1,28 +1,23 @@
 /**
  * Pipeline Phase 2 — Cluster.
  *
- * Pulls unclustered articles from the DB, runs multi-stage clustering
- * (TF-IDF within topic + AI per-topic batch), and persists the cluster
- * records WITHOUT synthesis (synthesis = null).  Synthesis is intentionally
- * deferred to Phase 3 so this phase stays within a tight time budget.
+ * Pulls unclustered articles, runs multi-stage clustering, and persists
+ * cluster records WITHOUT synthesis (synthesis = null).  Then fires the
+ * synthesize phase as a background task via waitUntil().
  *
- * When finished, fires /api/pipeline/synthesize as a separate non-blocking
- * HTTP request.  This creates a clean chain:
+ * waitUntil() keeps the Vercel function alive until the background fetch
+ * completes, preventing the early-termination race that kills unawaited
+ * fetch() calls after a response is returned.
  *
- *   cron/pipeline (ingest) → pipeline/cluster → pipeline/synthesize
- *
- * maxDuration = 90 s covers the worst-case scenario of 9 per-topic AI batches
- * with 2.5 s spacing between them plus actual Groq API call time.
- *
- * The endpoint is protected by the same CRON_SECRET used by the cron job.
- * It accepts POST only (GET returns 405) to prevent accidental browser hits.
+ * Chain: cron/pipeline → cluster (here) → synthesize
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { runCluster } from '@/lib/pipeline'
 
 export const runtime     = 'nodejs'
-export const maxDuration = 90   // AI clustering: up to 9 topics × ~8 s each
+export const maxDuration = 90
 
 function checkAuth(req: NextRequest): boolean {
   if (!process.env.CRON_SECRET) return true
@@ -41,21 +36,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const t0 = Date.now()
+  const t0     = Date.now()
+  const origin = getSiteOrigin(request)
+  const secret = process.env.CRON_SECRET
+  const headers: HeadersInit = {
+    ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+    'Content-Type': 'application/json',
+  }
+
+  // Queue the synthesize phase now — waitUntil keeps the function alive
+  // until the fetch resolves, even after we return the HTTP response.
+  const synthFetch = fetch(`${origin}/api/pipeline/synthesize`, { method: 'POST', headers })
+    .then(r => {
+      if (!r.ok) console.warn(`[cluster] synthesize phase returned HTTP ${r.status}`)
+      else        console.log('[cluster] synthesize phase accepted')
+    })
+    .catch(err => console.warn('[cluster] synthesize phase fetch failed:', String(err)))
+
+  waitUntil(synthFetch)
 
   try {
-    // Run bounded cluster phase (max 80 articles per invocation)
     const { clustersCreated, singletons } = await runCluster(80)
     const clusterMs = Date.now() - t0
-
-    // ── Fire synthesize phase (fire-and-forget) ───────────────────────────────
-    // Separate Vercel function invocation — no response wait.
-    const origin = getSiteOrigin(request)
-    const secret = process.env.CRON_SECRET
-    const headers: HeadersInit = secret ? { Authorization: `Bearer ${secret}` } : {}
-
-    fetch(`${origin}/api/pipeline/synthesize`, { method: 'POST', headers })
-      .catch(err => console.warn('[cluster] Failed to trigger synthesize phase:', String(err)))
 
     console.log(
       `[cluster] Done in ${clusterMs} ms — ${clustersCreated} clusters, ${singletons} singletons — synthesize triggered`
