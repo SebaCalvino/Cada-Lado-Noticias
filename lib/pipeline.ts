@@ -43,6 +43,10 @@ async function ensureSources(): Promise<Record<string, number>> {
 export async function runPipeline() {
   console.log('[pipeline] Starting...')
 
+  // Fail fast si faltan env vars críticas
+  if (!process.env.DATABASE_URL) throw new Error('[pipeline] DATABASE_URL no está configurada')
+  if (!process.env.GROQ_API_KEY)  throw new Error('[pipeline] GROQ_API_KEY no está configurada')
+
   // 1. Ensure sources exist
   const sourceIds = await ensureSources()
   console.log('[pipeline] Sources ensured:', Object.keys(sourceIds).length)
@@ -131,7 +135,10 @@ export async function runPipeline() {
         url: '',
       }))
     const synthesis = await synthesizeCluster(artsForSynthesis)
-    if (!synthesis) continue
+    if (!synthesis) {
+      console.warn(`[pipeline] Síntesis falló para cluster de ${artsForSynthesis.length} artículos (${artsForSynthesis.map(a => a.sourceSlug).join(', ')})`)
+      continue
+    }
 
     const imageUrl =
       arts.find((a) => a.imageUrl)?.imageUrl || null
