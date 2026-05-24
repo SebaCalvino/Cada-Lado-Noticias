@@ -178,7 +178,7 @@ export default function HeadlineComparison({
             href={art.article_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="group"
+            className="hover:bg-[var(--surface-2)] transition-colors duration-150"
             style={{
               display: 'block',
               padding: '13px 16px 13px 13px',
@@ -187,16 +187,7 @@ export default function HeadlineComparison({
                 i < articles.length - 1 ? '1px solid var(--line-soft)' : 'none',
               background: 'var(--surface)',
               textDecoration: 'none',
-              transition: 'background 0.2s ease',
             }}
-            onMouseEnter={e =>
-              ((e.currentTarget as HTMLElement).style.background =
-                'var(--surface-2)')
-            }
-            onMouseLeave={e =>
-              ((e.currentTarget as HTMLElement).style.background =
-                'var(--surface)')
-            }
           >
             {/* Source label */}
             <span
