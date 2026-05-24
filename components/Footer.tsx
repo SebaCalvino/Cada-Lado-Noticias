@@ -1,13 +1,13 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Github, Linkedin } from 'lucide-react'
-import { getNews } from '@/lib/api'
+import { getNewsClustersServer } from '@/lib/queries'
 
 export default async function Footer() {
   let latestNews: { id: number; title: string }[] = []
   try {
-    const news = await getNews(1)
-    latestNews = news.slice(0, 4).map(n => ({ id: n.id, title: n.title }))
+    const clusters = await getNewsClustersServer(1, 4)
+    latestNews = clusters.map(c => ({ id: c.id, title: c.title }))
   } catch {}
 
   const sections = [
