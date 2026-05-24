@@ -4,13 +4,16 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 
+// Every phrase ends with CADA LADO. — accent color ONLY highlights the brand name.
+// The longest phrase (last entry) acts as the invisible height spacer → zero CLS.
 const PHRASES = [
-  { pre: 'La misma noticia, desde',              em: 'CADA LADO.' },
-  { pre: 'Una noticia.',                          em: 'Distintas versiones.' },
-  { pre: 'Cómo la cuenta',                       em: 'cada medio.' },
-  { pre: 'El mismo hecho.',                       em: 'Distintos enfoques.' },
-  { pre: 'Lo que cambia según',                   em: 'quién lo cuenta.' },
-  { pre: 'Cada medio cuenta una historia. Mirá',  em: 'CADA LADO.' },
+  { pre: 'La misma noticia, desde',         em: 'CADA LADO.' },
+  { pre: 'Entendé la noticia desde',         em: 'CADA LADO.' },
+  { pre: 'Distintas versiones, desde',       em: 'CADA LADO.' },
+  { pre: 'La noticia completa, desde',       em: 'CADA LADO.' },
+  { pre: 'Mirá la historia desde',           em: 'CADA LADO.' },
+  { pre: 'El mismo hecho, visto desde',      em: 'CADA LADO.' },
+  { pre: 'Cada medio cuenta algo distinto.', em: 'CADA LADO.' }, // ← longest → spacer
 ]
 
 // Ticker: show DIRECT word-choice differences — that's the product's core WOW
