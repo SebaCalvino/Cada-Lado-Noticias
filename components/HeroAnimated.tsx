@@ -20,37 +20,38 @@ const TICKER_ITEMS = [
   'Clarín omite las protestas · La Nación destaca el apoyo empresarial · Página 12 da voz a los afectados',
 ]
 
+// Demo data: each coverage has a "highlight" — the key word that makes this outlet different
 const DEMO_EVENTS = [
   {
     fact: 'El gobierno anuncia recorte del 15% en el presupuesto educativo',
     coverages: [
-      { source: 'Clarín',    color: '#004B87', headline: 'El Gobierno ajusta gastos en educación para cumplir las metas fiscales' },
-      { source: 'La Nación', color: '#1A3A5C', headline: 'Avance en el equilibrio fiscal con ajuste en el gasto educativo' },
-      { source: 'Página 12', color: '#CC0000', headline: 'Milei destruye la educación pública: miles de docentes sin salario' },
-      { source: 'Infobae',   color: '#E30613', headline: 'Reducción del déficit: el Gobierno recorta fondos a universidades' },
+      { source: 'Clarín',    color: '#004B87', headline: 'El Gobierno ajusta gastos en educación para cumplir las metas fiscales',            highlight: 'ajusta gastos' },
+      { source: 'La Nación', color: '#1A3A5C', headline: 'Avance en el equilibrio fiscal con ajuste en el gasto educativo',                    highlight: 'Avance en el equilibrio fiscal' },
+      { source: 'Página 12', color: '#CC0000', headline: 'Milei destruye la educación pública: miles de docentes sin salario',                 highlight: 'destruye' },
+      { source: 'Infobae',   color: '#E30613', headline: 'Reducción del déficit: el Gobierno recorta fondos a universidades',                  highlight: 'Reducción del déficit' },
     ],
   },
   {
     fact: 'El dólar llega al nuevo máximo histórico',
     coverages: [
-      { source: 'Ámbito',    color: '#FF6B00', headline: 'El dólar toca el máximo del año; el mercado reacciona con cautela' },
-      { source: 'La Nación', color: '#1A3A5C', headline: 'El tipo de cambio se ajusta en línea con el acuerdo con el FMI' },
-      { source: 'Página 12', color: '#CC0000', headline: 'El Gobierno destruye el salario real con una nueva devaluación' },
-      { source: 'Clarín',    color: '#004B87', headline: 'El dólar escala y el Gobierno asegura que es parte del plan' },
+      { source: 'Ámbito',    color: '#FF6B00', headline: 'El dólar toca el máximo del año; el mercado reacciona con cautela',                  highlight: 'con cautela' },
+      { source: 'La Nación', color: '#1A3A5C', headline: 'El tipo de cambio se ajusta en línea con el acuerdo con el FMI',                    highlight: 'en línea con el acuerdo' },
+      { source: 'Página 12', color: '#CC0000', headline: 'El Gobierno destruye el salario real con una nueva devaluación',                    highlight: 'destruye el salario real' },
+      { source: 'Clarín',    color: '#004B87', headline: 'El dólar escala y el Gobierno asegura que es parte del plan',                       highlight: 'parte del plan' },
     ],
   },
   {
     fact: 'Reforma al régimen jubilatorio: nueva fórmula de actualización',
     coverages: [
-      { source: 'Infobae',     color: '#E30613', headline: 'El Gobierno moderniza el régimen previsional para hacerlo sostenible' },
-      { source: 'El Destape',  color: '#e53e3e', headline: 'Otro golpe a los jubilados: congelan las pensiones en plena inflación' },
-      { source: 'El Cronista', color: '#2C7BB6', headline: 'La reforma previsional reduce el gasto público en 2 puntos del PBI' },
-      { source: 'Página 12',   color: '#CC0000', headline: 'Milei les roba a los jubilados con una reforma que los hunde aún más' },
+      { source: 'Infobae',     color: '#E30613', headline: 'El Gobierno moderniza el régimen previsional para hacerlo sostenible',             highlight: 'moderniza' },
+      { source: 'El Destape',  color: '#e53e3e', headline: 'Otro golpe a los jubilados: congelan las pensiones en plena inflación',            highlight: 'golpe a los jubilados' },
+      { source: 'El Cronista', color: '#2C7BB6', headline: 'La reforma previsional reduce el gasto público en 2 puntos del PBI',               highlight: 'reduce el gasto' },
+      { source: 'Página 12',   color: '#CC0000', headline: 'Milei les roba a los jubilados con una reforma que los hunde aún más',            highlight: 'roba' },
     ],
   },
 ]
 
-// The longest phrase — used as invisible spacer to define stable container height
+// The longest phrase — invisible spacer for zero-CLS layout
 const LONGEST_PHRASE = PHRASES[PHRASES.length - 1]
 
 const H1_STYLE: React.CSSProperties = {
@@ -63,12 +64,40 @@ const H1_STYLE: React.CSSProperties = {
   margin: 0,
 }
 
+// Splits a headline string and highlights one phrase in the source's color
+function HighlightedHeadline({
+  headline,
+  highlight,
+  color,
+  active,
+}: {
+  headline: string
+  highlight: string
+  color: string
+  active: boolean
+}) {
+  if (!active || !highlight) {
+    return <>{headline}</>
+  }
+  const lower = headline.toLowerCase()
+  const hLower = highlight.toLowerCase()
+  const idx = lower.indexOf(hLower)
+  if (idx === -1) return <>{headline}</>
+
+  return (
+    <>
+      {headline.slice(0, idx)}
+      <span style={{ color, fontWeight: 700 }}>{headline.slice(idx, idx + highlight.length)}</span>
+      {headline.slice(idx + highlight.length)}
+    </>
+  )
+}
+
 export default function HeroAnimated() {
   const [visible, setVisible] = useState(false)
   const [phraseIdx, setPhraseIdx] = useState(0)
   const [phraseVisible, setPhraseVisible] = useState(true)
 
-  // Demo cycling state — ref avoids stale closure in interval
   const eventIdxRef = useRef(0)
   const [demoEventIdx, setDemoEventIdx] = useState(0)
   const [coverageIdx, setCoverageIdx] = useState(0)
@@ -90,7 +119,7 @@ export default function HeroAnimated() {
     return () => clearInterval(id)
   }, [])
 
-  // Demo coverage highlight cycles through each coverage, then advances event
+  // Demo: cycle through coverages, then advance event
   useEffect(() => {
     const id = setInterval(() => {
       const currentEvent = DEMO_EVENTS[eventIdxRef.current]
@@ -104,7 +133,7 @@ export default function HeroAnimated() {
         }
         return next
       })
-    }, 2600)
+    }, 2800)
     return () => clearInterval(id)
   }, [])
 
@@ -161,11 +190,11 @@ export default function HeroAnimated() {
             </div>
 
             {/* ── STABLE-HEIGHT ROTATING HEADLINE ──
-                An invisible copy of the longest phrase acts as a spacer and defines
-                the container height. All real phrases are absolutely positioned on
-                top of it, so the layout never shifts regardless of phrase length. */}
+                Invisible copy of the longest phrase defines container height.
+                All actual phrases are absolutely positioned on top.
+                Layout NEVER shifts regardless of phrase length. */}
             <div style={{ position: 'relative' }}>
-              {/* Invisible spacer (longest phrase) */}
+              {/* Invisible spacer */}
               <h1
                 aria-hidden="true"
                 style={{ ...H1_STYLE, visibility: 'hidden', pointerEvents: 'none', userSelect: 'none' }}
@@ -174,7 +203,7 @@ export default function HeroAnimated() {
                 <em style={{ fontStyle: 'italic' }}>{LONGEST_PHRASE.em}</em>
               </h1>
 
-              {/* Actual rotating phrases — absolutely stacked */}
+              {/* Rotating phrases — absolutely stacked, opacity-only transitions */}
               {PHRASES.map((p, i) => (
                 <h1
                   key={i}
@@ -302,6 +331,8 @@ function LiveComparisonDemo({
   event: (typeof DEMO_EVENTS)[0]
   activeCoverage: number
 }) {
+  const active = event.coverages[activeCoverage]
+
   return (
     <div style={{ border: '1px solid var(--line)', background: 'var(--surface)', overflow: 'hidden' }}>
 
@@ -326,7 +357,7 @@ function LiveComparisonDemo({
             fontWeight: 600,
           }}
         >
-          El mismo hecho · {event.coverages.length} medios
+          El mismo hecho · {event.coverages.length} versiones
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span
@@ -348,7 +379,7 @@ function LiveComparisonDemo({
       {/* The fact */}
       <div
         style={{
-          padding: '14px 16px',
+          padding: '12px 16px',
           borderBottom: '1px solid var(--line)',
           background: 'var(--surface)',
         }}
@@ -362,7 +393,7 @@ function LiveComparisonDemo({
             textTransform: 'uppercase',
             color: 'var(--ink-mute)',
             fontWeight: 600,
-            marginBottom: 6,
+            marginBottom: 5,
           }}
         >
           El hecho
@@ -370,11 +401,10 @@ function LiveComparisonDemo({
         <p
           style={{
             fontFamily: 'var(--font-fraunces), Georgia, serif',
-            fontSize: '14px',
+            fontSize: '13px',
             color: 'var(--ink)',
             lineHeight: 1.45,
             margin: 0,
-            fontWeight: 400,
           }}
         >
           {event.fact}
@@ -382,68 +412,84 @@ function LiveComparisonDemo({
       </div>
 
       {/* Coverage rows */}
-      {event.coverages.map((c, i) => (
-        <div
-          key={c.source}
-          style={{
-            padding: '12px 16px 12px 13px',
-            borderBottom: i < event.coverages.length - 1 ? '1px solid var(--line-soft)' : 'none',
-            borderLeft: `3px solid ${activeCoverage === i ? c.color : 'transparent'}`,
-            background: activeCoverage === i ? 'var(--surface-2)' : 'var(--surface)',
-            transition: 'background 0.5s ease, border-left-color 0.5s ease',
-          }}
-        >
-          <span
+      {event.coverages.map((c, i) => {
+        const isActive = activeCoverage === i
+        return (
+          <div
+            key={c.source}
             style={{
-              display: 'block',
-              fontSize: 10,
-              fontFamily: 'var(--font-mono)',
-              fontWeight: 700,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              color: c.color,
-              marginBottom: 4,
-              opacity: activeCoverage === i ? 1 : 0.7,
-              transition: 'opacity 0.5s ease',
+              padding: '11px 16px 11px 13px',
+              borderBottom: i < event.coverages.length - 1 ? '1px solid var(--line-soft)' : 'none',
+              borderLeft: `3px solid ${isActive ? c.color : 'transparent'}`,
+              background: isActive ? 'var(--surface-2)' : 'var(--surface)',
+              transition: 'background 0.45s ease, border-left-color 0.45s ease',
             }}
           >
-            {c.source}
-          </span>
-          <p
-            style={{
-              fontFamily: 'var(--font-fraunces), Georgia, serif',
-              fontSize: '13px',
-              lineHeight: 1.45,
-              color: activeCoverage === i ? 'var(--ink)' : 'var(--ink-mute)',
-              margin: 0,
-              fontStyle: 'italic',
-              transition: 'color 0.5s ease',
-            }}
-          >
-            "{c.headline}"
-          </p>
-        </div>
-      ))}
+            {/* Source name */}
+            <span
+              style={{
+                display: 'block',
+                fontSize: 10,
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 700,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: c.color,
+                marginBottom: 4,
+                opacity: isActive ? 1 : 0.5,
+                transition: 'opacity 0.45s ease',
+              }}
+            >
+              {c.source}
+            </span>
+            {/* Headline with highlighted key word */}
+            <p
+              style={{
+                fontFamily: 'var(--font-fraunces), Georgia, serif',
+                fontSize: '13px',
+                lineHeight: 1.5,
+                color: isActive ? 'var(--ink)' : 'var(--ink-faint)',
+                margin: 0,
+                fontStyle: 'italic',
+                transition: 'color 0.45s ease',
+              }}
+            >
+              "<HighlightedHeadline
+                headline={c.headline}
+                highlight={c.highlight}
+                color={c.color}
+                active={isActive}
+              />"
+            </p>
+          </div>
+        )
+      })}
 
-      {/* Panel footer */}
+      {/* Contrast indicator — shows the active outlet's key framing word */}
       <div
         style={{
-          padding: '10px 16px',
+          padding: '9px 16px',
           borderTop: '1px solid var(--line)',
           background: 'var(--surface-2)',
+          minHeight: 36,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
         }}
       >
-        <p
+        <span
           style={{
-            fontSize: 11,
+            fontSize: 10,
             fontFamily: 'var(--font-mono)',
             color: 'var(--ink-mute)',
-            margin: 0,
-            letterSpacing: '0.04em',
+            letterSpacing: '0.06em',
           }}
         >
-          Cada Lado analiza y compara automáticamente cada versión
-        </p>
+          {active?.source} elige llamarlo:{' '}
+          <span style={{ color: active?.color, fontWeight: 700 }}>
+            "{active?.highlight}"
+          </span>
+        </span>
       </div>
     </div>
   )
