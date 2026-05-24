@@ -121,3 +121,14 @@
 /* Smooth transition durations */
 .duration-800 { transition-duration: 800ms; }
 .duration-600 { transition-duration: 600ms; }
+
+/* News card hover — editorial left-border accent, no shadows or scale */
+.group:hover article[style] {
+  border-color: var(--line-strong) !important;
+}
+
+/* Pulse keyframe for live indicator dots */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}

@@ -37,10 +37,15 @@ export default function AnimatedNewsGrid({ featured, rest }: Props) {
 
   if (!featured && rest.length === 0) {
     return (
-      <div className="card p-12 text-center">
-        <p className="text-gray-500 text-lg mb-2">Todavía no hay noticias</p>
-        <p className="text-gray-400 text-sm">
-          El sistema monitorea los medios continuamente y procesa las noticias en cuanto aparecen.
+      <div
+        className="p-12 text-center"
+        style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}
+      >
+        <p className="font-serif text-lg mb-2" style={{ color: 'var(--ink-dim)' }}>
+          Todavía no hay noticias
+        </p>
+        <p style={{ fontSize: 13, color: 'var(--ink-mute)' }}>
+          El sistema monitorea los medios y procesa las noticias en cuanto aparecen.
         </p>
       </div>
     )
