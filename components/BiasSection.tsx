@@ -6,33 +6,34 @@ import { useEffect, useRef, useState } from 'react'
 type HeadlinePart = { text: string; highlight?: boolean }
 
 const EXAMPLE = {
-  event: 'El gobierno anuncia recorte del 15% en el presupuesto educativo',
+  event: 'El gobierno recorta un 15% el presupuesto de las universidades públicas',
   left: {
     source: 'Página 12',
     color: '#CC0000',
     bgTint: '#fff5f5',
-    // "destruye" and "sin salario" are the emotionally charged choices
     headline: [
       { text: 'Milei ' },
       { text: 'destruye', highlight: true },
-      { text: ' la educación pública: miles de docentes ' },
-      { text: 'sin salario', highlight: true },
+      { text: ' las universidades públicas: el mayor ' },
+      { text: 'desfinanciamiento', highlight: true },
+      { text: ' en décadas' },
     ] as HeadlinePart[],
-    emphasis: 'Las protestas docentes, el impacto en familias, el deterioro del sistema educativo',
-    omits: 'El déficit fiscal que motivó el recorte y el contexto del acuerdo con el FMI',
+    emphasis: 'El impacto en docentes y familias, el deterioro histórico del sistema educativo, las protestas masivas',
+    omits: 'El contexto fiscal que motivó el recorte, el déficit universitario previo y el acuerdo con el FMI',
   },
   right: {
     source: 'La Nación',
     color: '#1A3A5C',
     bgTint: '#f5f7fb',
-    // "avance" and "equilibrio fiscal" are the positive framings
     headline: [
       { text: 'El Gobierno ' },
-      { text: 'avanza en el equilibrio fiscal', highlight: true },
-      { text: ' con ajuste en el gasto educativo' },
+      { text: 'consolida el superávit', highlight: true },
+      { text: ' con una ' },
+      { text: 'reforma', highlight: true },
+      { text: ' en el gasto universitario' },
     ] as HeadlinePart[],
-    emphasis: 'Las metas fiscales, el acuerdo con el FMI, la responsabilidad presupuestaria',
-    omits: 'El impacto real en aulas, docentes y familias de menores recursos',
+    emphasis: 'Las metas fiscales, el acuerdo con el FMI, la "responsabilidad presupuestaria" del Ejecutivo',
+    omits: 'El impacto real en estudiantes, docentes y familias de bajos ingresos que dependen de la universidad pública',
   },
 }
 
@@ -84,16 +85,16 @@ export default function BiasSection() {
           style={{ transitionDelay: '0ms' }}
         >
           <p style={{ fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', fontWeight: 500, marginBottom: 16 }}>
-            El mismo hecho, dos versiones
+            La misma noticia — distintas versiones
           </p>
           <h2 className="text-3xl md:text-5xl font-serif leading-tight max-w-3xl mb-4" style={{ color: 'var(--ink)', fontWeight: 400 }}>
-            La misma noticia.
+            Lo que cambia no son los hechos.
             <br />
-            <em className="italic" style={{ color: 'var(--ink-dim)' }}>Contada de formas muy distintas.</em>
+            <em className="italic" style={{ color: 'var(--ink-dim)' }}>Es cómo cada medio los cuenta.</em>
           </h2>
           <p className="text-base md:text-lg max-w-2xl leading-relaxed mb-16" style={{ color: 'var(--ink-dim)', fontFamily: 'var(--font-fraunces), Georgia, serif' }}>
-            Los medios no inventan la noticia — la cuentan desde su propio punto de vista.
-            Ese enfoque forma tu opinión sin que lo notes.
+            La misma noticia puede sonar a avance o a catástrofe según el diario que la publique.
+            Esa diferencia forma tu opinión sin que lo notes.
           </p>
         </div>
 
@@ -184,8 +185,8 @@ export default function BiasSection() {
           style={{ transitionDelay: '450ms' }}
         >
           <p className="text-sm text-center max-w-xl mx-auto leading-relaxed" style={{ color: 'var(--ink-mute)' }}>
-            Cada Lado reúne todas las versiones del mismo hecho para que puedas leerlas juntas
-            y formar tu propia opinión.
+            Cada Lado reúne la cobertura de 12 medios argentinos sobre el mismo hecho —
+            para que veas la historia completa y formes tu propia opinión.
           </p>
         </div>
       </div>

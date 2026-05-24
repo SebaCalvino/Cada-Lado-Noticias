@@ -64,7 +64,7 @@ export default async function Footer() {
               Sin que te vendan humo.
             </p>
 
-            {/* GitHub + LinkedIn */}
+            {/* GitHub + LinkedIn × 2 */}
             <div className="flex gap-2">
               <a
                 href="https://github.com/Arkhram-Organization/Cada-Lado-Noticias"
@@ -77,6 +77,15 @@ export default async function Footer() {
               </a>
               <a
                 href="https://www.linkedin.com/in/sebasti%C3%A1n-calvi%C3%B1o-99073b302/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="LinkedIn — Sebastián Calviño"
+                className="footer-icon-btn"
+              >
+                <Linkedin size={15} />
+              </a>
+              <a
+                href="https://www.linkedin.com/in/theotrosman"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="LinkedIn"
