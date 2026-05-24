@@ -128,27 +128,20 @@ export function clusterArticles(
 }
 
 /**
- * Agrupación semántica vía Groq: le pasamos los títulos y nos dice cuáles
- * cubren el mismo hecho. Mucho más preciso que TF-IDF para noticias argentinas.
- * Retorna grupos de IDs de artículos.
+ * Envía un lote de artículos a Groq y devuelve los clusters encontrados.
+ * El usedIds externo permite evitar duplicados entre lotes solapados.
  */
-export async function clusterArticlesWithAI(
-  articles: ArticleInput[]
+async function _runClusterBatch(
+  articles: ArticleInput[],
+  usedIds: Set<number> = new Set()
 ): Promise<ClusterResult[]> {
   if (articles.length < 2) return []
 
-  // Groq puede manejar lotes de ~60 títulos cómodamente
-  const BATCH = 60
-  const allClusters: ClusterResult[] = []
-  const usedIds = new Set<number>()
+  const numbered = articles
+    .map((a, i) => `${i + 1}. [${a.sourceSlug}] ${a.title}`)
+    .join('\n')
 
-  for (let start = 0; start < articles.length; start += BATCH) {
-    const batch = articles.slice(start, start + BATCH)
-    const numbered = batch
-      .map((a, i) => `${i + 1}. [${a.sourceSlug}] ${a.title}`)
-      .join('\n')
-
-    const prompt = `Tenés estos titulares de medios argentinos. Agrupá los que cubren EXACTAMENTE el mismo hecho noticioso (mismo evento, mismo día). Un artículo puede estar en un solo grupo. Los artículos del MISMO medio NO pueden estar en el mismo grupo.
+  const prompt = `Tenés estos titulares de medios argentinos. Agrupá los que cubren EXACTAMENTE el mismo hecho noticioso (mismo evento, mismo día). Un artículo puede estar en un solo grupo. Los artículos del MISMO medio NO pueden estar en el mismo grupo.
 
 ${numbered}
 
@@ -157,64 +150,117 @@ Respondé SOLO con JSON válido, sin texto adicional:
 
 Solo incluí grupos de 2 o más artículos de fuentes distintas. Si no hay grupos, respondé {"groups": []}.`
 
-    try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1,
-          max_tokens: 500,
-        }),
-      })
+  const callGroq = async (): Promise<Response> =>
+    fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        // Aumentado: con 200+ artículos pueden ser 50+ grupos → más tokens de respuesta
+        max_tokens: 2000,
+      }),
+    })
 
-      if (!res.ok) {
-        if (res.status === 429) {
-          await new Promise(r => setTimeout(r, 15000))
-        }
-        continue
-      }
+  try {
+    let res = await callGroq()
 
-      const data  = await res.json()
-      let raw = data.choices[0].message.content.trim()
-      if (raw.startsWith('```')) raw = raw.replace(/```[a-z]*\n?/g, '').trim()
-
-      const parsed = JSON.parse(raw) as { groups: number[][] }
-
-      for (const group of (parsed.groups || [])) {
-        // group contiene índices 1-based dentro del batch
-        const idxs = group.map(n => n - 1).filter(i => i >= 0 && i < batch.length)
-        if (idxs.length < 2) continue
-
-        const arts = idxs.map(i => batch[i])
-        const slugs = arts.map(a => a.sourceSlug)
-        if (new Set(slugs).size < 2) continue
-
-        // Evitar que un artículo aparezca en múltiples clusters
-        const freshArts = arts.filter(a => !usedIds.has(a.id))
-        if (freshArts.length < 2) continue
-        if (new Set(freshArts.map(a => a.sourceSlug)).size < 2) continue
-
-        for (const a of freshArts) usedIds.add(a.id)
-
-        const simScores: Record<number, number> = {}
-        for (const a of freshArts) simScores[a.id] = 0.5 // score simbólico
-
-        allClusters.push({
-          articleIds:       freshArts.map(a => a.id),
-          sourceSlugs:      freshArts.map(a => a.sourceSlug),
-          similarityScores: simScores,
-        })
-      }
-    } catch (err) {
-      console.warn('[clustering-ai] batch failed:', err)
+    // Rate-limit: esperar y reintentar una vez
+    if (res.status === 429) {
+      console.warn('[clustering-ai] 429 rate limit — esperando 20s...')
+      await new Promise(r => setTimeout(r, 20000))
+      res = await callGroq()
     }
 
-    // Pausa entre batches de agrupación
+    if (!res.ok) {
+      console.warn(`[clustering-ai] Groq error ${res.status}`)
+      return []
+    }
+
+    const data  = await res.json()
+    let raw = data.choices[0].message.content.trim()
+    if (raw.startsWith('```')) raw = raw.replace(/```[a-z]*\n?/g, '').trim()
+
+    const parsed = JSON.parse(raw) as { groups: number[][] }
+    const clusters: ClusterResult[] = []
+
+    for (const group of (parsed.groups || [])) {
+      // group contiene índices 1-based dentro del batch
+      const idxs = group.map(n => n - 1).filter(i => i >= 0 && i < articles.length)
+      if (idxs.length < 2) continue
+
+      const arts = idxs.map(i => articles[i])
+      const slugs = arts.map(a => a.sourceSlug)
+      if (new Set(slugs).size < 2) continue
+
+      // Evitar que un artículo aparezca en múltiples clusters
+      const freshArts = arts.filter(a => !usedIds.has(a.id))
+      if (freshArts.length < 2) continue
+      if (new Set(freshArts.map(a => a.sourceSlug)).size < 2) continue
+
+      for (const a of freshArts) usedIds.add(a.id)
+
+      const simScores: Record<number, number> = {}
+      for (const a of freshArts) simScores[a.id] = 0.5 // score simbólico para clusters AI
+
+      clusters.push({
+        articleIds:       freshArts.map(a => a.id),
+        sourceSlugs:      freshArts.map(a => a.sourceSlug),
+        similarityScores: simScores,
+      })
+    }
+
+    return clusters
+  } catch (err) {
+    console.warn('[clustering-ai] batch failed:', err)
+    return []
+  }
+}
+
+/**
+ * Agrupación semántica vía Groq: le pasamos todos los títulos y nos dice cuáles
+ * cubren el mismo hecho. Mucho más preciso que TF-IDF para noticias argentinas.
+ *
+ * CAMBIO CLAVE: antes procesaba en batches aislados de 60 artículos. Si el artículo
+ * de La Nación sobre el mismo tema que Página 12 caía en distinto batch, NUNCA se
+ * comparaban → ambos quedaban como singletons. Ahora enviamos todos juntos en un
+ * solo llamado (llama-3.1-8b-instant soporta 131k tokens; 250 títulos ≈ 5k tokens).
+ */
+export async function clusterArticlesWithAI(
+  articles: ArticleInput[]
+): Promise<ClusterResult[]> {
+  if (articles.length < 2) return []
+
+  // Para ≤250 artículos: un solo batch — todos los artículos se comparan entre sí.
+  const MAX_SINGLE_BATCH = 250
+  if (articles.length <= MAX_SINGLE_BATCH) {
+    console.log(`[clustering-ai] Single batch: ${articles.length} articles`)
+    return _runClusterBatch(articles)
+  }
+
+  // Para >250: batches solapados (OVERLAP artículos compartidos entre lotes
+  // consecutivos) para que artículos en el borde del lote se comparen con los
+  // del lote siguiente.
+  const BATCH   = 180
+  const OVERLAP = 60
+  const allClusters: ClusterResult[] = []
+  const usedIds = new Set<number>()
+
+  console.log(`[clustering-ai] Overlapping batches: ${articles.length} articles, batch=${BATCH}, overlap=${OVERLAP}`)
+
+  for (let start = 0; start < articles.length; start += BATCH - OVERLAP) {
+    const batch = articles.slice(start, Math.min(start + BATCH, articles.length))
+    const freshBatch = batch.filter(a => !usedIds.has(a.id))
+    if (freshBatch.length < 2) continue
+
+    console.log(`[clustering-ai] Batch ${start}–${start + batch.length}: ${freshBatch.length} fresh articles`)
+    const clusters = await _runClusterBatch(freshBatch, usedIds)
+    allClusters.push(...clusters)
+
     if (start + BATCH < articles.length) {
       await new Promise(r => setTimeout(r, 3000))
     }

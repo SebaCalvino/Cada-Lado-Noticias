@@ -5,8 +5,8 @@ import { clusterArticlesWithAI, clusterArticles as clusterArticlesTFIDF, type Ar
 import { synthesizeCluster, type ArticleForSynthesis } from './ai'
 
 // Max clusters sintetizados por corrida — previene timeout y rate-limit de Groq.
-// Con el cron cada 1h se procesan hasta 15 clusters/h, más que suficiente.
-const MAX_CLUSTERS_PER_RUN = 15
+// 50 clusters × ~2.2s de pausa Groq = ~110s, bien dentro del maxDuration=600s.
+const MAX_CLUSTERS_PER_RUN = 50
 
 // Pausa entre llamadas a Groq — evita hit del límite de 30 RPM.
 const GROQ_CALL_DELAY_MS = 2200
@@ -98,9 +98,25 @@ export async function runPipeline() {
   }
   console.log('[pipeline] Saved', newCount, 'new articles')
 
-  // 4. Artículos sin clusterizar de las últimas 48h
+  // 4. Artículos para procesar en las últimas 48h
+  // Incluimos DOS grupos:
+  //   (a) artículos nunca procesados (clustered = false)
+  //   (b) artículos que en una corrida anterior quedaron como singletons
+  //       (clustered = true pero que NO están en cluster_articles)
+  //       Esto pasa cuando el algoritmo viejo procesaba batches aislados de 60
+  //       y artículos del mismo tema caían en batches distintos → nunca se comparaban.
   const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000)
-  const recentArticles = await db
+
+  // IDs de artículos recientes que ya están asignados a un cluster
+  const recentInClusterRows = await db
+    .select({ articleId: clusterArticles.articleId })
+    .from(clusterArticles)
+    .innerJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
+    .where(gte(rawArticles.scrapedAt, cutoff))
+  const inClusterIds = new Set(recentInClusterRows.map(r => r.articleId))
+
+  // Todos los artículos recientes (sin filtrar por clustered)
+  const allRecentArticles = await db
     .select({
       id:       rawArticles.id,
       title:    rawArticles.title,
@@ -109,9 +125,15 @@ export async function runPipeline() {
       sourceId: rawArticles.sourceId,
     })
     .from(rawArticles)
-    .where(and(gte(rawArticles.scrapedAt, cutoff), eq(rawArticles.clustered, false)))
+    .where(gte(rawArticles.scrapedAt, cutoff))
 
-  console.log('[pipeline] Unclustered articles to process:', recentArticles.length)
+  // Procesar los que NO están ya en un cluster (unclustered nuevos + singletons previos)
+  const recentArticles = allRecentArticles.filter(a => !inClusterIds.has(a.id))
+
+  console.log(
+    `[pipeline] Articles to cluster: ${recentArticles.length}` +
+    ` (${allRecentArticles.length} total recent, ${inClusterIds.size} already in clusters)`
+  )
   if (recentArticles.length < 2) {
     console.log('[pipeline] Not enough articles to cluster, done.')
     return
