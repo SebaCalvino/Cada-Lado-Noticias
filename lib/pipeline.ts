@@ -511,9 +511,6 @@ export async function runCleanup(
   for (const cluster of candidates) {
     checked++
 
-    // High source_count is a strong validity signal — skip to avoid false positives
-    if ((cluster.sourceCount ?? 0) >= 3) continue
-
     // Fetch this cluster's articles for quality scoring
     const articleRows = await db
       .select({ article: rawArticles })
@@ -541,6 +538,11 @@ export async function runCleanup(
     }))
 
     const score = scoreClusterQuality(inputs)
+
+    console.log(
+      `[cleanup] id=${cluster.id} sources=${cluster.sourceCount} ` +
+      `score=${score.toFixed(3)} "${(cluster.title ?? '').slice(0, 50)}"`
+    )
 
     if (score < CLEANUP_QUALITY_THRESHOLD) {
       await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
