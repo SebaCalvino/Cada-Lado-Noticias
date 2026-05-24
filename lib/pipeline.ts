@@ -22,7 +22,7 @@
  */
 
 import { db, sources, rawArticles, newsClusters, clusterArticles } from './db'
-import { eq, and, gte, inArray, isNull, isNotNull, ne, asc, desc } from 'drizzle-orm'
+import { eq, and, gte, inArray, isNull, isNotNull, ne, asc, desc, sql } from 'drizzle-orm'
 import { runAllScrapers } from './scrapers'
 import {
   clusterArticlesWithAI,
@@ -108,8 +108,9 @@ async function markProcessed(ids: number[]) {
  * Returns articles eligible for clustering within the given time window.
  *
  * "Eligible" means the article does NOT already appear in cluster_articles.
- * This catches both fresh (clustered=false) articles AND singletons from
- * previous runs that were marked clustered=true but never got a cluster entry.
+ * Articles are returned newest-first so the batch window always covers the
+ * most recent breaking news — the period most likely to have multi-source
+ * coverage.
  */
 async function fetchClusterableArticles(cutoff: Date) {
   const inClusterRows = await db
@@ -130,9 +131,70 @@ async function fetchClusterableArticles(cutoff: Date) {
     })
     .from(rawArticles)
     .where(gte(rawArticles.scrapedAt, cutoff))
+    .orderBy(desc(rawArticles.publishedAt))   // newest first → prioritises breaking news
 
   const toProcess = allRecent.filter(a => !inClusterIds.has(a.id))
   return { allRecent, toProcess, inClusterIds }
+}
+
+/**
+ * Pre-screening: find articles that share ≥2 significant keywords with at
+ * least one article from a DIFFERENT source.
+ *
+ * These are the articles most likely to form clusters, so we put them at the
+ * front of the batch before sending anything to Groq.  Articles with no
+ * cross-source keyword match go last — they're probably opinion pieces,
+ * lifestyle content, or local news that only one outlet covered.
+ *
+ * O(n²) on article count, but n ≤ ~200 articles so runs in < 5 ms.
+ */
+const CLUSTER_STOP = new Set([
+  'de','la','que','el','en','y','a','los','del','se','las','por','un','para',
+  'con','una','su','al','lo','como','pero','sus','le','ya','o','este','si',
+  'sobre','también','tras','hacia','desde','hasta','entre','muy','más','tan',
+  'fue','ser','es','son','han','ha','tiene','tienen','sera','estan','puede',
+])
+
+function prioritiseByKeywordOverlap(inputs: ArticleInput[]): ArticleInput[] {
+  const kw = inputs.map(a => ({
+    id:     a.id,
+    slug:   a.sourceSlug,
+    words:  new Set(
+      (a.title + ' ' + a.summary)
+        .toLowerCase()
+        .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+        .split(/\W+/)
+        .filter(w => w.length >= 4 && !CLUSTER_STOP.has(w))
+    ),
+  }))
+
+  const candidateIds = new Set<number>()
+
+  for (let i = 0; i < kw.length; i++) {
+    for (let j = i + 1; j < kw.length; j++) {
+      if (kw[i].slug === kw[j].slug) continue   // same source → skip
+      let shared = 0
+      for (const w of kw[i].words) {
+        if (kw[j].words.has(w)) {
+          shared++
+          if (shared >= 2) break   // enough evidence — no need to count further
+        }
+      }
+      if (shared >= 2) {
+        candidateIds.add(kw[i].id)
+        candidateIds.add(kw[j].id)
+      }
+    }
+  }
+
+  // Candidates first (high cluster potential), non-candidates last
+  const candidates    = inputs.filter(a =>  candidateIds.has(a.id))
+  const nonCandidates = inputs.filter(a => !candidateIds.has(a.id))
+  console.log(
+    `[cluster] pre-screen: ${candidates.length} cross-source candidates, ` +
+    `${nonCandidates.length} singletons-likely out of ${inputs.length} eligible`
+  )
+  return [...candidates, ...nonCandidates]
 }
 
 // ─── Phase 1: Ingest ──────────────────────────────────────────────────────────
@@ -236,16 +298,17 @@ export async function runCluster(
     ;({ toProcess: eligible } = await fetchClusterableArticles(WINDOW_96H))
   }
 
-  // Cap to maxArticles for this run
-  const batch = eligible.slice(0, maxArticles)
-  console.log(`[cluster] Processing ${batch.length} articles (${eligible.length} eligible)`)
+  console.log(`[cluster] ${eligible.length} eligible articles — building prioritised batch`)
 
-  if (batch.length < 2) {
+  if (eligible.length < 2) {
     console.log('[cluster] Not enough articles — done')
     return { clustersCreated: 0, singletons: 0 }
   }
 
-  const inputs: ArticleInput[] = batch
+  // Build ArticleInput list from ALL eligible articles, then reorder so
+  // cross-source keyword candidates come first.  Slice to maxArticles AFTER
+  // reordering so the batch is filled with the highest-potential articles.
+  const allInputs: ArticleInput[] = eligible
     .filter(a => sourceMap[a.sourceId])
     .map(a => ({
       id:         a.id,
@@ -253,6 +316,15 @@ export async function runCluster(
       summary:    a.summary || '',
       sourceSlug: sourceMap[a.sourceId].slug,
     }))
+
+  const prioritised = prioritiseByKeywordOverlap(allInputs)
+  const inputs      = prioritised.slice(0, maxArticles)
+
+  // Lookup map for full DB row (imageUrl, etc.) — used when persisting clusters
+  const articleById = new Map(eligible.map(a => [a.id, a]))
+  const batch       = inputs.map(i => articleById.get(i.id)!).filter(Boolean)
+
+  console.log(`[cluster] Processing ${inputs.length} articles (${eligible.length} eligible)`)
 
   // Multi-stage clustering (AI with TF-IDF fallback)
   let clusters = await clusterArticlesWithAI(inputs).catch(err => {
