@@ -57,6 +57,36 @@ async function markProcessed(ids: number[]) {
   await db.update(rawArticles).set({ clustered: true }).where(inArray(rawArticles.id, ids))
 }
 
+/**
+ * Fetch articles eligible for clustering in the given time window.
+ * Includes both unclustered articles AND singletons from previous runs
+ * (articles marked clustered=true that never made it into cluster_articles).
+ */
+async function fetchClusterableArticles(cutoff: Date) {
+  // IDs already assigned to a real cluster within the window
+  const inClusterRows = await db
+    .select({ articleId: clusterArticles.articleId })
+    .from(clusterArticles)
+    .innerJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
+    .where(gte(rawArticles.scrapedAt, cutoff))
+  const inClusterIds = new Set(inClusterRows.map(r => r.articleId))
+
+  const allRecent = await db
+    .select({
+      id:       rawArticles.id,
+      title:    rawArticles.title,
+      summary:  rawArticles.summary,
+      imageUrl: rawArticles.imageUrl,
+      sourceId: rawArticles.sourceId,
+    })
+    .from(rawArticles)
+    .where(gte(rawArticles.scrapedAt, cutoff))
+
+  // Include: genuinely unclustered + previous-run singletons (clustered=true but no cluster entry)
+  const toProcess = allRecent.filter(a => !inClusterIds.has(a.id))
+  return { allRecent, toProcess, inClusterIds }
+}
+
 export async function runPipeline() {
   console.log('[pipeline] Starting...')
 
@@ -98,41 +128,27 @@ export async function runPipeline() {
   }
   console.log('[pipeline] Saved', newCount, 'new articles')
 
-  // 4. Artículos para procesar en las últimas 48h
-  // Incluimos DOS grupos:
-  //   (a) artículos nunca procesados (clustered = false)
-  //   (b) artículos que en una corrida anterior quedaron como singletons
-  //       (clustered = true pero que NO están en cluster_articles)
-  //       Esto pasa cuando el algoritmo viejo procesaba batches aislados de 60
-  //       y artículos del mismo tema caían en batches distintos → nunca se comparaban.
-  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000)
+  // 4. Articles to cluster — start with 48h window, auto-expand to 96h if thin.
+  // Includes unclustered new articles AND previous-run singletons (already
+  // marked clustered=true but never actually assigned to a cluster entry).
+  const WINDOW_48H = new Date(Date.now() - 48 * 60 * 60 * 1000)
+  const WINDOW_96H = new Date(Date.now() - 96 * 60 * 60 * 1000)
+  const MIN_ARTICLES = 5 // expand window if fewer than this
 
-  // IDs de artículos recientes que ya están asignados a un cluster
-  const recentInClusterRows = await db
-    .select({ articleId: clusterArticles.articleId })
-    .from(clusterArticles)
-    .innerJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
-    .where(gte(rawArticles.scrapedAt, cutoff))
-  const inClusterIds = new Set(recentInClusterRows.map(r => r.articleId))
+  let { allRecent: allRecentArticles, toProcess: recentArticles } =
+    await fetchClusterableArticles(WINDOW_48H)
 
-  // Todos los artículos recientes (sin filtrar por clustered)
-  const allRecentArticles = await db
-    .select({
-      id:       rawArticles.id,
-      title:    rawArticles.title,
-      summary:  rawArticles.summary,
-      imageUrl: rawArticles.imageUrl,
-      sourceId: rawArticles.sourceId,
-    })
-    .from(rawArticles)
-    .where(gte(rawArticles.scrapedAt, cutoff))
-
-  // Procesar los que NO están ya en un cluster (unclustered nuevos + singletons previos)
-  const recentArticles = allRecentArticles.filter(a => !inClusterIds.has(a.id))
+  if (recentArticles.length < MIN_ARTICLES) {
+    console.log(
+      `[pipeline] Content thin (${recentArticles.length} articles in 48h) — expanding window to 96h`
+    )
+    ;({ allRecent: allRecentArticles, toProcess: recentArticles } =
+      await fetchClusterableArticles(WINDOW_96H))
+  }
 
   console.log(
     `[pipeline] Articles to cluster: ${recentArticles.length}` +
-    ` (${allRecentArticles.length} total recent, ${inClusterIds.size} already in clusters)`
+    ` (${allRecentArticles.length} total recent, ${allRecentArticles.length - recentArticles.length} already in clusters)`
   )
   if (recentArticles.length < 2) {
     console.log('[pipeline] Not enough articles to cluster, done.')

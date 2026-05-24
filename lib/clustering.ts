@@ -1,8 +1,24 @@
-// Clustering híbrido: TF-IDF cosine similarity + agrupación semántica vía Groq
-// El TF-IDF solo falla en noticias argentinas porque cada medio usa vocabulario
-// completamente distinto para el mismo hecho ("dólar sube" vs "tipo de cambio escala").
-// La solución: umbral muy bajo (0.05) para capturar solapamiento parcial, más
-// un paso de agrupación por Groq que entiende sinónimos y contexto semántico.
+/**
+ * Multi-stage clustering for Argentine news headlines.
+ *
+ * Stage 1 — Topic routing: each article is classified by topic (politics,
+ *   economy, sports…) via keyword matching. Articles in DIFFERENT topics
+ *   never enter the same comparison batch. This is the primary defense
+ *   against false-positive clusters (e.g. "university elections" being
+ *   merged with "how cats choose their human").
+ *
+ * Stage 2 — TF-IDF within topic: cosine similarity (threshold 0.15, raised
+ *   from the previous 0.05) surfaces obvious same-event pairs cheaply.
+ *
+ * Stage 3 — AI validation (Groq, per-topic batches): remaining within-topic
+ *   articles are sent with a strict no-false-positive prompt. The model must
+ *   be ≥90% confident to group two articles. Bad examples are shown explicitly.
+ *
+ * Stage 4 — Coherence guard: every AI-produced cluster is checked with a
+ *   lightweight TF-IDF cosine test. Clusters with near-zero vocabulary overlap
+ *   (similarity < 0.05 for ALL pairs) are silently dropped — the final safety
+ *   net against model hallucination.
+ */
 
 export interface ArticleInput {
   id: number
@@ -17,25 +33,132 @@ export interface ClusterResult {
   similarityScores: Record<number, number>
 }
 
+// ── Stop words ────────────────────────────────────────────────────────────────
+
 const STOP_WORDS = new Set([
   'de','la','que','el','en','y','a','los','del','se','las','por','un','para',
-  'con','una','su','al','lo','como','más','pero','sus','le','ya','o','este',
-  'sí','porque','esta','entre','cuando','muy','sin','sobre','también','me',
+  'con','una','su','al','lo','como','mas','pero','sus','le','ya','o','este',
+  'si','porque','esta','entre','cuando','muy','sin','sobre','tambien','me',
   'hasta','hay','donde','quien','desde','todo','nos','durante','todos','uno',
   'les','ni','contra','otros','ese','eso','ante','ellos','e','esto','antes',
-  'algunos','qué','unos','yo','otro','otras','otra','él','tanto','esa',
+  'algunos','que','unos','yo','otro','otras','otra','el','tanto','esa',
   'estos','mucho','quienes','nada','muchos','cual','poco','ella','estar',
   'estas','alguno','alguna','aunque','siempre','fue','ser','es','son','han',
-  'ha','tiene','tienen','había','será','están','puede','pueden','debe',
-  'deben','tras','hacia','según','mediante','sido','sido','ser',
-  'argentina','argentino','argentinos','años','año',
+  'ha','tiene','tienen','habia','sera','estan','puede','pueden','debe',
+  'deben','tras','hacia','segun','mediante','sido','argentina','argentino',
+  'argentinos','anos','ano','nuevo','nueva','gran','grandes','primer',
+  'primera','segundo','segunda','ultimo','ultima','tras',
 ])
 
-function tokenize(text: string): string[] {
+// ── Topic classification ──────────────────────────────────────────────────────
+// Keyword lists use normalized (no diacritics, lower-case) strings.
+// A single article can only belong to ONE topic. Articles in different topics
+// are NEVER compared — eliminating cross-topic false positives entirely.
+
+const TOPIC_KEYWORDS: Record<string, string[]> = {
+  politica: [
+    'milei','kirchner','fernandez','macri','massa','bullrich','larreta',
+    'gobierno','presidente','presidenta','congreso','senado','diputado',
+    'legislatura','decreto','ministro','ministros','gabinete','partido',
+    'peronismo','kirchnerismo','libertad avanza','pro','ucr',
+    'eleccion','elecciones','voto','votos','candidato','candidatura',
+    'gobernador','intendente','municipio','casa rosada','balotaje','ballotage',
+    'oposicion','coalicion','politica','politico','politicos',
+  ],
+  economia: [
+    'dolar','peso','inflacion','pbi','deuda','fmi','banco','reservas',
+    'tarifas','nafta','precio','precios','tipo de cambio','cepo',
+    'exportacion','importacion','credito','bono','bonos','accion','acciones',
+    'indec','canasta','presupuesto','superavit','deficit','ajuste',
+    'mercado','economia','economico','financiero','monetario',
+    'impuesto','iva','salario','sueldos','paritaria','pobreza','indigencia',
+    'crecimiento','recesion','desempleo','desocupacion','quiebra',
+  ],
+  internacional: [
+    'estados unidos','eeuu','trump','biden','harris','rusia','ucrania',
+    'ukraine','putin','zelensky','china','europa','union europea',
+    'israel','palestina','gaza','hamas','iran','netanyahu','nato','otan',
+    'onu','oms','g20','g7','guerra','conflicto','misil','ataque','invasion',
+    'cumbre','diplomacia','sancion','tratado','acuerdo internacional',
+    'brasil','lula','venezuela','maduro','cuba','colombia','chile','mexico',
+    'internacional','mundial','global','exterior',
+  ],
+  deportes: [
+    'futbol','boca','river','racing','independiente','san lorenzo','belgrano',
+    'messi','di maria','seleccion argentina','mundial','copa america',
+    'copa libertadores','gol','partido','fixture','torneo','campeon',
+    'ascenso','descenso','tenis','basquet','rugby','formula 1',
+    'olimpiadas','atletismo','boxeo','natacion','ciclismo','superliga',
+    'liga profesional','primera division','defensa y justicia','lanus',
+    'deportes','deportivo','futbolista',
+  ],
+  educacion: [
+    'universidad','uba','unc','utn','conicet','unlp','unt',
+    'estudiante','estudiantes','docente','docentes','maestro','profesor',
+    'escuela','facultad','rector','decano','becas','investigacion',
+    'ciencia','educacion','clases','aula','pedagogia','matricula',
+    'arancelamiento','presupuesto universitario','autonomia universitaria',
+  ],
+  sociedad: [
+    'justicia','juicio','causa judicial','fiscal','juez','tribunal','condena',
+    'crimen','robo','asalto','asesinato','homicidio','policia','gendarmeria',
+    'detenido','preso','prision','carcel','derechos humanos',
+    'marcha','protesta','manifestacion','paro','huelga','sindicato',
+    'obrero','trabajador','femicidio','violencia de genero',
+    'inseguridad','narcotrafico','corrupcion','causa penal',
+  ],
+  entretenimiento: [
+    'pelicula','cine','serie','musica','libro','teatro','arte',
+    'festival','premios','oscar','grammy','actriz','actor','director',
+    'obra','estreno','concierto','artista','cantante','novela',
+    'reality','show','espectaculo','mascota','animales','gato','perro',
+    'mascotas','viajes','turismo','gastronomia','cocina','restaurante',
+    'moda','tendencia','celebridad','famosos','tiktok','redes sociales',
+    'viral','humor','comedia',
+  ],
+  salud: [
+    'salud','hospital','medico','enfermedad','vacuna','epidemia',
+    'pandemia','medicamento','tratamiento','diagnostico','enfermero',
+    'clinica','cirugia','cancer','diabetes','virus','bacteria','contagio',
+    'ministerio de salud','obra social','prepaga','sistema sanitario',
+  ],
+  ambiente: [
+    'ambiente','clima','cambio climatico','calentamiento global',
+    'inundacion','incendio forestal','terremoto','sismo','sequia',
+    'contaminacion','reciclaje','energia renovable','solar','eolica',
+    'bosque','glaciar','fauna','flora','biodiversidad','medio ambiente',
+    'catastrofe','desastre natural',
+  ],
+}
+
+function normalizeStr(text: string): string {
   return text
     .toLowerCase()
-    .normalize('NFD').replace(/\p{Diacritic}/gu, '') // quita acentos para mejor match
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
     .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function classifyTopic(text: string): string {
+  const norm = normalizeStr(text)
+  let bestTopic = 'general'
+  let bestScore = 0
+  for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+    let score = 0
+    for (const kw of keywords) {
+      if (norm.includes(kw)) score += kw.includes(' ') ? 2 : 1 // multi-word phrases score higher
+    }
+    if (score > bestScore) { bestScore = score; bestTopic = topic }
+  }
+  return bestTopic
+}
+
+// ── TF-IDF ───────────────────────────────────────────────────────────────────
+
+function tokenize(text: string): string[] {
+  return normalizeStr(text)
     .split(/\s+/)
     .filter(t => t.length > 2 && !STOP_WORDS.has(t))
 }
@@ -43,45 +166,41 @@ function tokenize(text: string): string[] {
 function computeTFIDF(docs: string[][]): Map<string, number>[] {
   const N = docs.length
   const df = new Map<string, number>()
-  for (const doc of docs) {
+  for (const doc of docs)
     for (const term of new Set(doc)) df.set(term, (df.get(term) || 0) + 1)
-  }
+
   return docs.map(doc => {
     const tf = new Map<string, number>()
     for (const term of doc) tf.set(term, (tf.get(term) || 0) + 1)
-    const tfidf = new Map<string, number>()
+    const vec = new Map<string, number>()
     for (const [term, count] of tf) {
       const idf = Math.log((N + 1) / ((df.get(term) || 0) + 1))
-      tfidf.set(term, (count / doc.length) * idf)
+      vec.set(term, (count / doc.length) * idf)
     }
-    return tfidf
+    return vec
   })
 }
 
 function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
   let dot = 0, normA = 0, normB = 0
-  for (const [term, val] of a) {
-    dot   += val * (b.get(term) || 0)
-    normA += val * val
-  }
-  for (const [, val] of b) normB += val * val
-  if (normA === 0 || normB === 0) return 0
+  for (const [t, v] of a) { dot += v * (b.get(t) || 0); normA += v * v }
+  for (const [, v] of b) normB += v * v
+  if (!normA || !normB) return 0
   return dot / (Math.sqrt(normA) * Math.sqrt(normB))
 }
 
 /**
- * Clustering basado en TF-IDF con umbral bajo (0.05).
- * Alcanza para noticias con algún vocabulario en común.
- * Para noticias con vocabulario completamente distinto, se usa
- * clusterArticlesWithAI() en el pipeline.
+ * TF-IDF clustering with union-find.
+ * Default threshold raised to 0.15 (was 0.05) to reduce false positives.
+ * Used directly as primary clustering when AI is unavailable (fallback).
  */
 export function clusterArticles(
   articles: ArticleInput[],
-  threshold = 0.05   // Bajo: captura más solapamiento parcial
+  threshold = 0.15
 ): ClusterResult[] {
   if (articles.length < 2) return []
 
-  const docs    = articles.map(a => tokenize(`${a.title} ${a.title} ${a.summary}`)) // título x2 para darle más peso
+  const docs    = articles.map(a => tokenize(`${a.title} ${a.title} ${a.summary}`))
   const vectors = computeTFIDF(docs)
   const n       = articles.length
   const parent  = Array.from({ length: n }, (_, i) => i)
@@ -111,29 +230,94 @@ export function clusterArticles(
     groups.get(root)!.push(i)
   }
 
-  const clusters: ClusterResult[] = []
+  const results: ClusterResult[] = []
   for (const indices of groups.values()) {
     if (indices.length < 2) continue
-    const sourceSlugs = indices.map(i => articles[i].sourceSlug)
-    if (new Set(sourceSlugs).size < 2) continue
+    const slugs = indices.map(i => articles[i].sourceSlug)
+    if (new Set(slugs).size < 2) continue
     const simScores: Record<number, number> = {}
     for (const i of indices) {
-      let maxSim = 0
-      for (const j of indices) { if (i !== j) maxSim = Math.max(maxSim, scores[i][j]) }
-      simScores[articles[i].id] = maxSim
+      let best = 0
+      for (const j of indices) if (i !== j) best = Math.max(best, scores[i][j])
+      simScores[articles[i].id] = best
     }
-    clusters.push({ articleIds: indices.map(i => articles[i].id), sourceSlugs, similarityScores: simScores })
+    results.push({
+      articleIds:       indices.map(i => articles[i].id),
+      sourceSlugs:      slugs,
+      similarityScores: simScores,
+    })
   }
-  return clusters
+  return results
 }
 
+// ── Coherence guard ───────────────────────────────────────────────────────────
+// Rejects a cluster if EVERY pairwise cosine similarity is below MIN_SIM.
+// Catches clusters where the AI grouped articles with near-zero vocabulary
+// overlap (e.g. "Russia attacks Kiev" + "Trump on Iran deal").
+
+const COHERENCE_MIN_SIM = 0.05
+
+function clusterIsCoherent(articleIds: number[], allArticles: ArticleInput[]): boolean {
+  const arts = articleIds
+    .map(id => allArticles.find(a => a.id === id))
+    .filter(Boolean) as ArticleInput[]
+  if (arts.length < 2) return false
+
+  const docs    = arts.map(a => tokenize(`${a.title} ${a.title} ${a.summary}`))
+  const vectors = computeTFIDF(docs)
+
+  for (let i = 0; i < arts.length; i++)
+    for (let j = i + 1; j < arts.length; j++)
+      if (cosineSimilarity(vectors[i], vectors[j]) >= COHERENCE_MIN_SIM) return true
+
+  return false // all pairs have near-zero overlap → unrelated
+}
+
+// ── AI clustering (Groq) ──────────────────────────────────────────────────────
+
 /**
- * Envía un lote de artículos a Groq y devuelve los clusters encontrados.
- * El usedIds externo permite evitar duplicados entre lotes solapados.
+ * Strict no-false-positive prompt.
+ *
+ * Key rules explicitly encoded:
+ *  • Articles must share a specific event, NOT just a topic
+ *  • Must share at least one named person / org / place
+ *  • Negative examples mirror the real bad cases observed in production
+ *  • "If in doubt → don't group"
  */
+const STRICT_PROMPT_HEADER = `Sos un editor jefe muy exigente. Tu única tarea: identificar pares de artículos que cubren EXACTAMENTE el mismo evento específico.
+
+REQUISITOS para agrupar (deben cumplirse TODOS):
+1. Mismo hecho puntual — no solo el mismo tema general
+2. Al menos un protagonista, organización o lugar en común
+3. Contexto temporal similar (mismo día o período muy cercano)
+4. Confianza ≥ 90%
+
+PROHIBIDO agrupar si:
+• Solo comparten una categoría temática ("economía", "política", "internacional")
+• Comparten una palabra suelta pero hablan de eventos distintos
+• Son de países o instituciones diferentes sin relación directa
+• Tenés menos del 90% de certeza
+
+EJEMPLOS DE ERRORES GRAVES (nunca hacer esto):
+❌ "Elecciones en la Facultad de Artes de la UNC" + "Cómo los gatos eligen a su humano preferido"
+   → solo comparten el verbo "elegir" — son temas completamente distintos
+❌ "Rusia lanza ataque con misiles contra Kiev" + "Trump negocia acuerdo con Irán"
+   → ambos son noticias internacionales pero de eventos completamente distintos
+❌ "Milei habla del acuerdo con el FMI" + "El Banco Central sube las tasas de interés"
+   → misma categoría económica, distintos hechos
+
+EJEMPLO CORRECTO:
+✓ "Milei firma el DNU sobre desregulación" + "El Gobierno publicó el polémico DNU desregulador"
+  → mismo decreto, mismos protagonistas ✓
+
+IMPORTANTE: Preferí NO agrupar antes que agrupar mal. Un cluster incorrecto destruye la credibilidad del producto.
+
+`
+
 async function _runClusterBatch(
   articles: ArticleInput[],
-  usedIds: Set<number> = new Set()
+  usedIds: Set<number>,
+  allArticlesForCoherence: ArticleInput[],
 ): Promise<ClusterResult[]> {
   if (articles.length < 2) return []
 
@@ -141,16 +325,12 @@ async function _runClusterBatch(
     .map((a, i) => `${i + 1}. [${a.sourceSlug}] ${a.title}`)
     .join('\n')
 
-  const prompt = `Tenés estos titulares de medios argentinos. Agrupá los que cubren EXACTAMENTE el mismo hecho noticioso (mismo evento, mismo día). Un artículo puede estar en un solo grupo. Los artículos del MISMO medio NO pueden estar en el mismo grupo.
+  const prompt =
+    STRICT_PROMPT_HEADER +
+    numbered +
+    '\n\nRespondé SOLO con JSON válido, sin texto adicional:\n{"groups": [[1,3], [2,5,7]]}\n\nSolo grupos de 2+ artículos de fuentes DISTINTAS con ≥90% certeza. Sin grupos → {"groups": []}.'
 
-${numbered}
-
-Respondé SOLO con JSON válido, sin texto adicional:
-{"groups": [[1,3,7], [2,5], [4,6,8]]}
-
-Solo incluí grupos de 2 o más artículos de fuentes distintas. Si no hay grupos, respondé {"groups": []}.`
-
-  const callGroq = async (): Promise<Response> =>
+  const callGroq = () =>
     fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -158,30 +338,23 @@ Solo incluí grupos de 2 o más artículos de fuentes distintas. Si no hay grupo
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        // Aumentado: con 200+ artículos pueden ser 50+ grupos → más tokens de respuesta
-        max_tokens: 2000,
+        model:       process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+        messages:    [{ role: 'user', content: prompt }],
+        temperature: 0.0, // deterministic — we want strict factual matching, not creativity
+        max_tokens:  1500,
       }),
     })
 
   try {
     let res = await callGroq()
-
-    // Rate-limit: esperar y reintentar una vez
     if (res.status === 429) {
-      console.warn('[clustering-ai] 429 rate limit — esperando 20s...')
-      await new Promise(r => setTimeout(r, 20000))
+      console.warn('[clustering-ai] 429 — waiting 20s then retrying')
+      await new Promise(r => setTimeout(r, 20_000))
       res = await callGroq()
     }
+    if (!res.ok) { console.warn(`[clustering-ai] Groq error ${res.status}`); return [] }
 
-    if (!res.ok) {
-      console.warn(`[clustering-ai] Groq error ${res.status}`)
-      return []
-    }
-
-    const data  = await res.json()
+    const data = await res.json()
     let raw = data.choices[0].message.content.trim()
     if (raw.startsWith('```')) raw = raw.replace(/```[a-z]*\n?/g, '').trim()
 
@@ -189,23 +362,29 @@ Solo incluí grupos de 2 o más artículos de fuentes distintas. Si no hay grupo
     const clusters: ClusterResult[] = []
 
     for (const group of (parsed.groups || [])) {
-      // group contiene índices 1-based dentro del batch
       const idxs = group.map(n => n - 1).filter(i => i >= 0 && i < articles.length)
       if (idxs.length < 2) continue
 
-      const arts = idxs.map(i => articles[i])
+      const arts  = idxs.map(i => articles[i])
       const slugs = arts.map(a => a.sourceSlug)
       if (new Set(slugs).size < 2) continue
 
-      // Evitar que un artículo aparezca en múltiples clusters
       const freshArts = arts.filter(a => !usedIds.has(a.id))
-      if (freshArts.length < 2) continue
-      if (new Set(freshArts.map(a => a.sourceSlug)).size < 2) continue
+      if (freshArts.length < 2 || new Set(freshArts.map(a => a.sourceSlug)).size < 2) continue
+
+      // ── Coherence guard ──────────────────────────────────────────────────
+      // Reject clusters where all article pairs have near-zero vocabulary
+      // overlap — these are hallucinated connections by the model.
+      if (!clusterIsCoherent(freshArts.map(a => a.id), allArticlesForCoherence)) {
+        console.warn(
+          `[clustering-ai] Coherence guard rejected: [${freshArts.map(a => a.sourceSlug).join(', ')}] "${freshArts.map(a => a.title.slice(0, 40)).join('" / "')}"`
+        )
+        continue
+      }
 
       for (const a of freshArts) usedIds.add(a.id)
-
       const simScores: Record<number, number> = {}
-      for (const a of freshArts) simScores[a.id] = 0.5 // score simbólico para clusters AI
+      for (const a of freshArts) simScores[a.id] = 0.5
 
       clusters.push({
         articleIds:       freshArts.map(a => a.id),
@@ -221,50 +400,67 @@ Solo incluí grupos de 2 o más artículos de fuentes distintas. Si no hay grupo
   }
 }
 
+// ── Public entry point ────────────────────────────────────────────────────────
+
 /**
- * Agrupación semántica vía Groq: le pasamos todos los títulos y nos dice cuáles
- * cubren el mismo hecho. Mucho más preciso que TF-IDF para noticias argentinas.
+ * Multi-stage semantic clustering.
  *
- * CAMBIO CLAVE: antes procesaba en batches aislados de 60 artículos. Si el artículo
- * de La Nación sobre el mismo tema que Página 12 caía en distinto batch, NUNCA se
- * comparaban → ambos quedaban como singletons. Ahora enviamos todos juntos en un
- * solo llamado (llama-3.1-8b-instant soporta 131k tokens; 250 títulos ≈ 5k tokens).
+ * False negatives (missed clusters) are MUCH better than false positives
+ * (wrong merges). Every stage is tuned conservatively.
  */
 export async function clusterArticlesWithAI(
   articles: ArticleInput[]
 ): Promise<ClusterResult[]> {
   if (articles.length < 2) return []
 
-  // Para ≤250 artículos: un solo batch — todos los artículos se comparan entre sí.
-  const MAX_SINGLE_BATCH = 250
-  if (articles.length <= MAX_SINGLE_BATCH) {
-    console.log(`[clustering-ai] Single batch: ${articles.length} articles`)
-    return _runClusterBatch(articles)
+  // Stage 1: classify every article by topic
+  type Tagged = ArticleInput & { topic: string }
+  const tagged: Tagged[] = articles.map(a => ({
+    ...a,
+    topic: classifyTopic(`${a.title} ${a.summary}`),
+  }))
+
+  // Group by topic — cross-topic articles never compete
+  const byTopic = new Map<string, Tagged[]>()
+  for (const a of tagged) {
+    if (!byTopic.has(a.topic)) byTopic.set(a.topic, [])
+    byTopic.get(a.topic)!.push(a)
   }
 
-  // Para >250: batches solapados (OVERLAP artículos compartidos entre lotes
-  // consecutivos) para que artículos en el borde del lote se comparen con los
-  // del lote siguiente.
-  const BATCH   = 180
-  const OVERLAP = 60
+  const topicSummary = [...byTopic.entries()]
+    .map(([t, arts]) => `${t}:${arts.length}`)
+    .join(' ')
+  console.log(`[clustering] Topics — ${topicSummary}`)
+
   const allClusters: ClusterResult[] = []
-  const usedIds = new Set<number>()
+  const usedIds     = new Set<number>()
+  let   batchCount  = 0
 
-  console.log(`[clustering-ai] Overlapping batches: ${articles.length} articles, batch=${BATCH}, overlap=${OVERLAP}`)
+  for (const [topic, topicArts] of byTopic) {
+    if (topicArts.length < 2) continue
 
-  for (let start = 0; start < articles.length; start += BATCH - OVERLAP) {
-    const batch = articles.slice(start, Math.min(start + BATCH, articles.length))
-    const freshBatch = batch.filter(a => !usedIds.has(a.id))
-    if (freshBatch.length < 2) continue
-
-    console.log(`[clustering-ai] Batch ${start}–${start + batch.length}: ${freshBatch.length} fresh articles`)
-    const clusters = await _runClusterBatch(freshBatch, usedIds)
-    allClusters.push(...clusters)
-
-    if (start + BATCH < articles.length) {
-      await new Promise(r => setTimeout(r, 3000))
+    // Stage 2: TF-IDF within topic (threshold 0.15 — 3× higher than before)
+    const tfidfClusters = clusterArticles(topicArts, 0.15)
+    for (const c of tfidfClusters) {
+      const freshIds = c.articleIds.filter(id => !usedIds.has(id))
+      const freshSlugs = freshIds.map(id => topicArts.find(a => a.id === id)!.sourceSlug)
+      if (freshIds.length < 2 || new Set(freshSlugs).size < 2) continue
+      for (const id of freshIds) usedIds.add(id)
+      allClusters.push({ ...c, articleIds: freshIds, sourceSlugs: freshSlugs })
     }
+
+    // Stage 3: AI for articles that TF-IDF didn't cluster (within same topic)
+    const unclustered = topicArts.filter(a => !usedIds.has(a.id))
+    if (unclustered.length < 2) continue
+
+    if (batchCount > 0) await new Promise(r => setTimeout(r, 2_500))
+
+    console.log(`[clustering-ai] Topic "${topic}": ${unclustered.length} articles → AI`)
+    const aiClusters = await _runClusterBatch(unclustered, usedIds, articles)
+    allClusters.push(...aiClusters)
+    batchCount++
   }
 
+  console.log(`[clustering] Done — ${allClusters.length} clusters from ${articles.length} articles`)
   return allClusters
 }

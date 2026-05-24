@@ -16,14 +16,6 @@ const PHRASES = [
   { pre: 'Cada medio cuenta algo distinto.', em: 'CADA LADO.' }, // ← longest → spacer
 ]
 
-// Ticker: show DIRECT word-choice differences — that's the product's core WOW
-const TICKER_ITEMS = [
-  'Sobre el mismo recorte → La Nación: "reforma presupuestaria" · Página 12: "destrucción" · Infobae: "optimización"',
-  'Sobre el mismo paro → TN: "caos en el centro" · El Destape: "histórica movilización" · Clarín: "protestas aisladas"',
-  'Sobre la misma inflación → Ámbito: "índice en descenso" · El Cronista: "siguen las presiones" · Página 12: "récord histórico"',
-  'Sobre el mismo acuerdo → La Nación: "señal de confianza" · Perfil: "condiciones polémicas" · La Izquierda Diario: "entrega al FMI"',
-]
-
 // Strong editorial contrast: same fact, wildly different word choices
 const DEMO_EVENTS = [
   {
@@ -262,42 +254,6 @@ export default function HeroAnimated() {
         </div>
       </div>
 
-      {/* Ticker: direct word-choice comparisons — shows the product's value in one line */}
-      <div
-        className={`border-t transition-all duration-700 ease-out ${visible ? 'opacity-100' : 'opacity-0'}`}
-        style={{ borderColor: 'var(--line)', transitionDelay: '600ms' }}
-      >
-        <div className="flex items-stretch overflow-hidden">
-          <div
-            className="shrink-0 flex items-center px-4 py-2.5"
-            style={{
-              background:      'var(--ink)',
-              color:           'var(--bg)',
-              fontSize:        10,
-              fontFamily:      'var(--font-mono)',
-              fontWeight:      600,
-              letterSpacing:   '0.18em',
-              textTransform:   'uppercase',
-              whiteSpace:      'nowrap',
-            }}
-          >
-            Última hora
-          </div>
-          <div className="overflow-hidden flex-1 py-2.5">
-            <div
-              className="ticker-track whitespace-nowrap"
-              style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)' }}
-            >
-              {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-                <span key={i} className="inline-block mx-10">
-                  <span style={{ color: 'var(--ink-faint)', marginRight: 8 }}>·</span>
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
     </section>
   )
 }
