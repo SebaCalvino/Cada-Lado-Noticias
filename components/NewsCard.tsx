@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Clock } from 'lucide-react'
 import type { NewsCluster } from '@/lib/types'
-import { timeAgo } from '@/lib/utils'
+import { timeAgo, noticiaHref } from '@/lib/utils'
 import SourceDots from './SourceDots'
 
 const CATEGORY_COLOR: Record<string, string> = {
@@ -26,7 +26,7 @@ export default function NewsCard({ cluster, featured = false }: Props) {
   const hasImage = !!cluster.image_url
 
   return (
-    <Link href={`/noticias/${cluster.id}`} className="block group h-full">
+    <Link href={noticiaHref(cluster.id, cluster.title)} className="block group h-full">
       <article
         className="h-full flex flex-col overflow-hidden transition-colors duration-200"
         style={{

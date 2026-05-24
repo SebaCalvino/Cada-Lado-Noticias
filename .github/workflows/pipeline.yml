@@ -26,15 +26,29 @@ jobs:
           sleep 180
 
       - name: Trigger scraping pipeline
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           echo "Disparando pipeline — $(date -u '+%Y-%m-%d %H:%M UTC') [trigger: ${{ github.event_name }}]"
 
+          # Validar que APP_URL esté configurado
+          if [ -z "$APP_URL" ]; then
+            echo "ERROR: El secret APP_URL no está configurado en este repositorio."
+            echo "Ve a Settings → Secrets and variables → Actions → New repository secret"
+            echo "  Name: APP_URL"
+            echo "  Value: https://tu-proyecto.vercel.app"
+            exit 1
+          fi
+
+          echo "Target URL: ${APP_URL}/api/cron/pipeline"
+
           HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -X POST \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
             -H "Content-Type: application/json" \
             --max-time 600 \
-            "${{ secrets.APP_URL }}/api/cron/pipeline")
+            "${APP_URL}/api/cron/pipeline")
 
           echo "HTTP status: $HTTP_STATUS"
           cat /tmp/response.json

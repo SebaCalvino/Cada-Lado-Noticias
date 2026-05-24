@@ -31,3 +31,21 @@ export function getCategoryColor(cat: string | null): string {
   if (!cat) return 'bg-gray-100 text-gray-700'
   return CATEGORY_COLORS[cat] || 'bg-gray-100 text-gray-700'
 }
+
+/** Convierte un título en un slug URL-friendly en español */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '') // quita acentos
+    .replace(/[^a-z0-9\s-]/g, '')   // solo letras, números, espacios y guiones
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 60)                    // máx 60 chars para URLs razonables
+}
+
+/** Genera el href canónico de una noticia: /noticias/titulo-de-la-noticia-123 */
+export function noticiaHref(id: number, title: string): string {
+  return `/noticias/${slugify(title)}-${id}`
+}

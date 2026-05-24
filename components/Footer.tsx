@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Github, Linkedin } from 'lucide-react'
 import { getNewsClustersServer } from '@/lib/queries'
+import { noticiaHref } from '@/lib/utils'
 
 export default async function Footer() {
   let latestNews: { id: number; title: string }[] = []
@@ -75,7 +76,7 @@ export default async function Footer() {
                 <Github size={15} />
               </a>
               <a
-                href="https://www.linkedin.com/in/theotrosman"
+                href="https://www.linkedin.com/in/sebasti%C3%A1n-calvi%C3%B1o-99073b302/"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="LinkedIn"
@@ -92,7 +93,7 @@ export default async function Footer() {
             <ul className="space-y-3">
               {latestNews.length > 0 ? latestNews.map(n => (
                 <li key={n.id}>
-                  <Link href={`/noticias/${n.id}`} className="footer-link block leading-snug line-clamp-2">
+                  <Link href={noticiaHref(n.id, n.title)} className="footer-link block leading-snug line-clamp-2">
                     {n.title}
                   </Link>
                 </li>
