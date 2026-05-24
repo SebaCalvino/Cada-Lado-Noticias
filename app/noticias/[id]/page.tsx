@@ -43,6 +43,45 @@ function estimateReadingTime(text: string | null): number {
   return Math.max(1, Math.ceil(text.trim().split(/\s+/).length / 200))
 }
 
+/**
+ * Divide la síntesis en párrafos con varias estrategias de fallback:
+ * 1. Doble salto de línea (lo que pide el prompt de IA)
+ * 2. Salto de línea simple
+ * 3. Auto-split cada ~3 oraciones para textos largos sin saltos
+ */
+function splitIntoParagraphs(text: string): string[] {
+  if (!text.trim()) return []
+
+  // 1. Doble salto de línea — caso ideal
+  let paras = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean)
+  if (paras.length > 1) return paras
+
+  // 2. Salto de línea simple
+  paras = text.split(/\n/).map(p => p.trim()).filter(Boolean)
+  if (paras.length > 1) return paras
+
+  // 3. Auto-split por oraciones (~3 por párrafo) para textos largos sin saltos
+  if (text.length > 400) {
+    // Usa un separador temporal para dividir en oraciones
+    const split = text
+      .replace(/([.!?])\s+([A-ZÁÉÍÓÚÑ«"])/g, '$1$2')
+      .split('')
+      .map(s => s.trim())
+      .filter(Boolean)
+
+    if (split.length >= 4) {
+      const perPara = Math.ceil(split.length / Math.ceil(split.length / 3))
+      const result: string[] = []
+      for (let i = 0; i < split.length; i += perPara) {
+        result.push(split.slice(i, i + perPara).join(' '))
+      }
+      return result.filter(Boolean)
+    }
+  }
+
+  return [text.trim()]
+}
+
 // Bold numbers, percentages, and monetary values inline
 function HighlightNumbers({ text }: { text: string }) {
   const parts = text.split(/((?:\$\s?)?\d[\d.,]*(?:\s*(?:%|millones?|mil millones?|trillones?|bn|bn\.?))?)/gi)
@@ -75,7 +114,14 @@ export default async function NoticiaDetailPage({ params }: Props) {
   const accentColor = CATEGORY_ACCENT[cluster.category ?? ''] ?? '#374151'
   const badgeColor  = CATEGORY_BADGE[cluster.category ?? '']  ?? 'bg-gray-500'
   const readingTime = estimateReadingTime(cluster.synthesis)
-  const paragraphs  = cluster.synthesis ? cluster.synthesis.split(/\n\n+/).filter(p => p.trim()) : []
+  const paragraphs  = splitIntoParagraphs(cluster.synthesis ?? '')
+
+  // Deduplicar artículos por fuente: el mismo medio puede aparecer varias veces
+  // en cluster.articles (uno por artículo scrapeado). Nos quedamos con el primero
+  // (que tiene el coverage_percentage más alto gracias al ORDER BY del query).
+  const uniqueArticles = cluster.articles.filter(
+    (a, i, arr) => arr.findIndex(b => b.source_slug === a.source_slug) === i
+  )
 
   // Pick a pull-quote: first key fact that's long enough to be interesting
   const pullQuote = cluster.key_facts?.find(f => f.length > 60) ?? null
@@ -207,14 +253,14 @@ export default async function NoticiaDetailPage({ params }: Props) {
             <XOpinions clusterId={cluster.id} />
 
             {/* Per-source coverage */}
-            {cluster.articles.length > 0 && (
+            {uniqueArticles.length > 0 && (
               <section className="mt-10 pt-6 border-t-2 border-gray-900">
                 <h2 className="font-serif font-bold text-2xl text-gray-900 mb-2">
                   Lo que dijo cada medio
                 </h2>
                 <p className="text-sm text-gray-500 mb-5">Qué enfatizó cada diario y qué omitió deliberadamente</p>
                 <div className="space-y-4">
-                  {cluster.articles.map(article => (
+                  {uniqueArticles.map(article => (
                     <CoverageBar key={article.source_slug} article={article} />
                   ))}
                 </div>
@@ -251,7 +297,7 @@ export default async function NoticiaDetailPage({ params }: Props) {
               )}
 
               {/* Ideology spectrum */}
-              {cluster.articles.length > 0 && (() => {
+              {uniqueArticles.length > 0 && (() => {
                 const IDEOLOGY: Record<string, { score: number; label: string }> = {
                   clarin:       { score:  0.3, label: 'Centro-derecha' },
                   lanacion:     { score:  0.6, label: 'Centro-derecha' },
@@ -268,7 +314,7 @@ export default async function NoticiaDetailPage({ params }: Props) {
                 }
 
                 // Sort by ideology score and assign rainbow colors based on position
-                const sorted = [...cluster.articles]
+                const sorted = [...uniqueArticles]
                   .map(a => ({
                     slug:  a.source_slug,
                     name:  a.source_name,
