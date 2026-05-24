@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server'
+import { runPipeline } from '@/lib/pipeline'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 300
 
 export async function POST() {
-  // Fire and forget — don't await
-  import('@/lib/pipeline').then(({ runPipeline }) => {
-    runPipeline().catch((err) => console.error('Pipeline error:', err))
-  })
-
-  return NextResponse.json({ status: 'ok', message: 'Scraping iniciado en background' })
+  try {
+    await runPipeline()
+    return NextResponse.json({ status: 'ok', message: 'Scraping completado' })
+  } catch (err) {
+    console.error('Pipeline error:', err)
+    return NextResponse.json({ error: 'Pipeline failed', detail: String(err) }, { status: 500 })
+  }
 }

@@ -50,7 +50,7 @@ export interface SynthesisResult {
   sourceAnalyses: SourceAnalysis[]
 }
 
-async function callGroq(userPrompt: string): Promise<string> {
+async function callGroq(userPrompt: string, attempt = 0): Promise<string> {
   const res = await fetch(GROQ_API, {
     method: 'POST',
     headers: {
@@ -66,6 +66,14 @@ async function callGroq(userPrompt: string): Promise<string> {
       temperature: 0.3,
     }),
   })
+
+  if (res.status === 429 && attempt < 4) {
+    const wait = Math.pow(2, attempt) * 5000 // 5s, 10s, 20s, 40s
+    console.warn(`[groq] Rate limited, retrying in ${wait / 1000}s (attempt ${attempt + 1})`)
+    await new Promise((r) => setTimeout(r, wait))
+    return callGroq(userPrompt, attempt + 1)
+  }
+
   if (!res.ok) throw new Error(`Groq API error: ${res.status}`)
   const data = await res.json()
   return data.choices[0].message.content

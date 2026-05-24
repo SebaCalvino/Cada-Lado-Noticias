@@ -130,8 +130,6 @@ export async function runPipeline() {
         summary: a.summary || '',
         url: '',
       }))
-    // Rate limit: Groq free tier ~6k TPM, each synthesis ~3k tokens → wait 30s between calls
-    await new Promise((r) => setTimeout(r, 30_000))
     const synthesis = await synthesizeCluster(artsForSynthesis)
     if (!synthesis) continue
 
