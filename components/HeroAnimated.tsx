@@ -141,8 +141,8 @@ export default function HeroAnimated() {
             borderColor: 'var(--line)',
           }}
         >
-          <span>Buenos Aires, Argentina</span>
-          <span className="hidden sm:inline">12 medios monitoreados · actualizado hoy</span>
+          <span>Argentina · cobertura en tiempo real</span>
+          <span className="hidden sm:inline">12 medios · análisis narrativo continuo</span>
         </div>
       </div>
 
@@ -172,7 +172,7 @@ export default function HeroAnimated() {
                 className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
                 style={{ background: '#16a34a', animation: 'pulse 2.2s ease-in-out infinite' }}
               />
-              Monitoreo en tiempo real
+              Análisis narrativo en tiempo real
             </div>
 
             {/* ── STABLE ROTATING HEADLINE ──

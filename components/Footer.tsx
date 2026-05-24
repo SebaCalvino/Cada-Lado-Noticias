@@ -127,6 +127,9 @@ export default async function Footer() {
           {/* Medios monitoreados */}
           <div>
             <FooterHeading>Medios monitoreados</FooterHeading>
+            <p style={{ fontSize: 12, color: '#5a5652', lineHeight: 1.6, marginBottom: 14 }}>
+              Fuentes analizadas continuamente para reconstruir múltiples narrativas informativas.
+            </p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
               {medios.map(m => (
                 <a key={m.name} href={m.url} target="_blank" rel="noopener noreferrer" className="footer-link">
@@ -146,9 +149,9 @@ export default async function Footer() {
             © {new Date().getFullYear()} CADA LADO Noticias · Síntesis generada con IA · Argentina
           </span>
           <div className="flex gap-5">
-            <Link href="#" className="footer-bottom-link">Acerca de</Link>
-            <Link href="#" className="footer-bottom-link">Términos</Link>
-            <Link href="#" className="footer-bottom-link">Privacidad</Link>
+            <Link href="/about"   className="footer-bottom-link">Acerca de</Link>
+            <Link href="/terms"   className="footer-bottom-link">Términos</Link>
+            <Link href="/privacy" className="footer-bottom-link">Privacidad</Link>
           </div>
         </div>
       </div>

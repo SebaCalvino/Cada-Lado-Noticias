@@ -40,33 +40,36 @@ async function handle(request: NextRequest) {
 
   const t0 = Date.now()
 
+  // Origin + auth headers — used for both cluster and synthesize triggers
+  const origin = getSiteOrigin(request)
+  const secret = process.env.CRON_SECRET
+  const headers: HeadersInit = secret ? { Authorization: `Bearer ${secret}` } : {}
+
   try {
     // ── Phase 1: Ingest (synchronous, fast) ──────────────────────────────────
     const { newArticles, sourceCount, skipped } = await runIngest()
     const ingestMs = Date.now() - t0
 
-    // If ingest was skipped (recent scrape detected), don't cascade to cluster.
-    // Return early so we don't kick off unnecessary work.
+    // ── Phase 2+3: Cluster → Synthesize (fire-and-forget) ────────────────────
+    // We ALWAYS trigger the cluster phase regardless of whether ingest was
+    // skipped.  Reason: a previous run may have articles that were clustered
+    // but not yet synthesized (synthesis = null), or clustering may have failed
+    // mid-run leaving articles in limbo.  The cluster + synthesize phases each
+    // return early if there is nothing to do — triggering them costs < 1 ms.
+    fetch(`${origin}/api/pipeline/cluster`, { method: 'POST', headers })
+      .catch(err => console.warn('[cron] Failed to trigger cluster phase:', String(err)))
+
     if (skipped) {
-      console.log(`[cron] Skipped — recent scrape detected, no further phases triggered`)
+      console.log(
+        `[cron] Ingest skipped (recent scrape) in ${ingestMs} ms — cluster phase triggered to drain backlog`
+      )
       return NextResponse.json({
         ok:      true,
         skipped: true,
         ingestMs,
-        message: 'Ingest skipped — scraped too recently, no downstream phases triggered',
+        message: 'Ingest skipped — cluster/synthesize triggered to drain any pending backlog',
       })
     }
-
-    // ── Phase 2: Cluster (fire-and-forget) ───────────────────────────────────
-    // This creates a SEPARATE Vercel function invocation — the current request
-    // does not wait for it.  The cluster route will itself fire the synthesize
-    // route when it completes (same pattern).
-    const origin = getSiteOrigin(request)
-    const secret = process.env.CRON_SECRET
-    const headers: HeadersInit = secret ? { Authorization: `Bearer ${secret}` } : {}
-
-    fetch(`${origin}/api/pipeline/cluster`, { method: 'POST', headers })
-      .catch(err => console.warn('[cron] Failed to trigger cluster phase:', String(err)))
 
     console.log(`[cron] Ingest done in ${ingestMs} ms — cluster phase triggered`)
 
@@ -80,6 +83,9 @@ async function handle(request: NextRequest) {
     })
   } catch (err) {
     console.error('[cron] Ingest error:', err)
+    // Even on ingest error, try to drain any pending synthesis backlog
+    fetch(`${origin}/api/pipeline/synthesize`, { method: 'POST', headers })
+      .catch(() => {})
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

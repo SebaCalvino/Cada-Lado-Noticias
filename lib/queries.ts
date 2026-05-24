@@ -132,6 +132,8 @@ export async function getNewsDetailServer(id: number) {
         source_slug:          source.slug,
         source_name:          source.name,
         source_color:         source.color,
+        ideology_score:       source.ideologyScore,
+        ideology_label:       source.ideologyLabel ?? null,
         article_title:        article.title,
         article_url:          article.url,
         published_at:         article.publishedAt?.toISOString() ?? null,

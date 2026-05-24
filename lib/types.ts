@@ -12,6 +12,8 @@ export interface ClusterArticle {
   source_slug: string
   source_name: string
   source_color: string
+  ideology_score: number
+  ideology_label: string | null
   article_title: string
   article_url: string
   published_at: string | null
