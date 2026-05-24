@@ -1,95 +1,149 @@
 'use client'
 
-import type { ClusterArticle } from '@/lib/types'
-import { ExternalLink, AlertTriangle, CheckCircle } from 'lucide-react'
+/**
+ * CoverageBar — editorial per-source analysis card.
+ *
+ * Design principles:
+ *  • Left border in source brand colour — instant visual identification.
+ *  • No "Completo" / "Omite info" traffic-light badges — those felt like a
+ *    judgment algorithm, not editorial analysis.
+ *  • "Destaca" instead of "ÉNFASIS" — plain language.
+ *  • Omissions in a soft amber wash — noticed but not alarming.
+ *  • Typography and spacing consistent with the site's editorial palette.
+ */
 
-// Local ideology map — keep in this client component
-const IDEOLOGY: Record<string, { score: number; label: string }> = {
-  'clarin':       { score:  0.3, label: 'Centro-derecha' },
-  'lanacion':     { score:  0.6, label: 'Centro-derecha' },
-  'infobae':      { score:  0.2, label: 'Centro' },
-  'pagina12':     { score: -0.7, label: 'Izquierda' },
-  'ambito':       { score:  0.1, label: 'Centro' },
-  'cronista':     { score:  0.2, label: 'Centro' },
-  'perfil':       { score: -0.1, label: 'Centro' },
-  'laizquierda':  { score: -0.8, label: 'Izquierda' },
-  'tn':           { score:  0.2, label: 'Centro' },
-  'eldestape':    { score: -0.5, label: 'Centro-izquierda' },
-  'mdzol':        { score:  0.0, label: 'Centro' },
-  'minutouno':    { score: -0.2, label: 'Centro' },
-}
+import type { ClusterArticle } from '@/lib/types'
+import { ExternalLink } from 'lucide-react'
 
 export default function CoverageBar({ article }: { article: ClusterArticle }) {
-  const hasOmissions =
+  const hasEmphasis   = article.emphasis   && article.emphasis.trim()   !== ''
+  const hasOmissions  =
     article.omissions &&
     article.omissions !== 'Sin omisiones destacadas.' &&
     article.omissions.trim() !== ''
 
-  const ideologyLabel = IDEOLOGY[article.source_slug]?.label ?? null
-
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
-      {/* Color accent line at top */}
-      <div className="h-0.5 w-full" style={{ backgroundColor: article.source_color }} />
-
-      {/* Header */}
-      <div className="px-4 py-3 bg-gray-50 flex items-center justify-between">
-        <div className="flex items-start gap-2.5">
-          {/* Source dot */}
-          <div
-            className="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
-            style={{ backgroundColor: article.source_color }}
-          />
-          <div>
-            <span className="font-bold text-sm text-gray-900">
-              {article.source_name}
-            </span>
-            {ideologyLabel && (
-              <span className="block text-xs text-gray-400 mt-0.5">{ideologyLabel}</span>
-            )}
-          </div>
-          {hasOmissions ? (
-            <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full font-medium ml-1 mt-0.5">
-              <AlertTriangle size={10} />
-              Omite info
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full font-medium ml-1 mt-0.5">
-              <CheckCircle size={10} />
-              Completo
-            </span>
-          )}
-        </div>
+    <div
+      style={{
+        border:          '1px solid var(--line)',
+        borderLeft:      `3px solid ${article.source_color}`,
+        background:      'var(--surface)',
+      }}
+    >
+      {/* ── Header ────────────────────────────────────────────────────── */}
+      <div
+        style={{
+          padding:       '9px 14px 9px 12px',
+          borderBottom:  '1px solid var(--line-soft)',
+          background:    'var(--surface-2)',
+          display:       'flex',
+          alignItems:    'center',
+          justifyContent:'space-between',
+          gap:           8,
+        }}
+      >
+        <span
+          style={{
+            fontSize:       10,
+            fontFamily:     'var(--font-mono)',
+            fontWeight:     700,
+            letterSpacing:  '0.13em',
+            textTransform:  'uppercase',
+            color:          article.source_color,
+          }}
+        >
+          {article.source_name}
+        </span>
         <a
           href={article.article_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors shrink-0"
+          className="hover:opacity-80 transition-opacity"
+          style={{
+            display:     'flex',
+            alignItems:  'center',
+            gap:         4,
+            fontSize:    11,
+            fontFamily:  'var(--font-mono)',
+            color:       'var(--ink-mute)',
+            textDecoration: 'none',
+            whiteSpace:  'nowrap',
+          }}
           onClick={e => e.stopPropagation()}
         >
-          Ver nota <ExternalLink size={11} />
+          Ver nota <ExternalLink size={10} />
         </a>
       </div>
 
-      {/* Content */}
-      <div className="px-4 py-3 space-y-2.5 bg-white">
-        <p className="text-sm font-medium text-gray-800 line-clamp-2">
-          {article.article_title}
-        </p>
+      {/* ── Content ───────────────────────────────────────────────────── */}
+      <div style={{ padding: '12px 14px 12px 12px' }}>
 
-        {article.emphasis && (
-          <div>
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Énfasis</span>
-            <p className="text-sm text-gray-600 mt-1 leading-relaxed">{article.emphasis}</p>
+        {hasEmphasis && (
+          <div style={{ marginBottom: hasOmissions ? 10 : 0 }}>
+            <span
+              style={{
+                display:       'block',
+                fontSize:      10,
+                fontFamily:    'var(--font-mono)',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color:         'var(--ink-mute)',
+                marginBottom:  4,
+                fontWeight:    500,
+              }}
+            >
+              Destaca
+            </span>
+            <p
+              style={{
+                fontSize:   13,
+                color:      'var(--ink-2)',
+                lineHeight: 1.7,
+                margin:     0,
+              }}
+            >
+              {article.emphasis}
+            </p>
           </div>
         )}
 
         {hasOmissions && (
-          <div className="bg-amber-50 border border-amber-100 rounded-lg p-3">
-            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Omite</span>
-            <p className="text-sm text-amber-900 mt-1 leading-relaxed">{article.omissions}</p>
+          <div
+            style={{
+              padding:    '10px 12px',
+              background: '#fffbf0',
+              border:     '1px solid #ede0be',
+            }}
+          >
+            <span
+              style={{
+                display:       'block',
+                fontSize:      10,
+                fontFamily:    'var(--font-mono)',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color:         '#9a6f1a',
+                marginBottom:  4,
+                fontWeight:    500,
+              }}
+            >
+              No menciona
+            </span>
+            <p
+              style={{
+                fontSize:   13,
+                color:      '#5a3e08',
+                lineHeight: 1.7,
+                margin:     0,
+              }}
+            >
+              {article.omissions}
+            </p>
           </div>
         )}
+
+        {/* Fallback: if no analysis yet, show nothing */}
+        {!hasEmphasis && !hasOmissions && null}
       </div>
     </div>
   )

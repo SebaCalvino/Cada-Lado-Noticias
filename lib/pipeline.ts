@@ -1,15 +1,45 @@
+/**
+ * Pipeline split into three independent phases.
+ *
+ * Phase 1 — runIngest()
+ *   Scrape all RSS feeds and persist new articles to the DB.
+ *   Fast (~15 s). Always called first by the cron endpoint, which returns
+ *   immediately after this phase completes.
+ *
+ * Phase 2 — runCluster(maxArticles)
+ *   Pull unclustered articles, run multi-stage clustering, and persist the
+ *   cluster records to the DB *without* synthesis (synthesis = null).
+ *   Medium (~30 s). Triggered as a fire-and-forget HTTP call from the cron.
+ *
+ * Phase 3 — runSynthesize(maxClusters)
+ *   Find clusters that have no synthesis yet, run Groq synthesis on them in
+ *   a small bounded batch, and write the results back.
+ *   Slow but bounded (~80 s for 10 clusters). Triggered by the cluster phase.
+ *
+ * This split keeps the cron endpoint's HTTP response time to ~15 s so
+ * GitHub Actions and Vercel cron schedulers never time-out waiting for it.
+ * Each phase runs in its own Vercel function invocation with its own budget.
+ */
+
 import { db, sources, rawArticles, newsClusters, clusterArticles } from './db'
-import { eq, and, gte, inArray } from 'drizzle-orm'
+import { eq, and, gte, inArray, isNull } from 'drizzle-orm'
 import { runAllScrapers } from './scrapers'
-import { clusterArticlesWithAI, clusterArticles as clusterArticlesTFIDF, type ArticleInput } from './clustering'
+import {
+  clusterArticlesWithAI,
+  clusterArticles as clusterArticlesTFIDF,
+  type ArticleInput,
+} from './clustering'
 import { synthesizeCluster, type ArticleForSynthesis } from './ai'
 
-// Max clusters sintetizados por corrida — previene timeout y rate-limit de Groq.
-// 50 clusters × ~2.2s de pausa Groq = ~110s, bien dentro del maxDuration=600s.
-const MAX_CLUSTERS_PER_RUN = 50
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-// Pausa entre llamadas a Groq — evita hit del límite de 30 RPM.
-const GROQ_CALL_DELAY_MS = 2200
+/** Minimum pause between consecutive Groq synthesis calls (30 RPM limit). */
+const GROQ_CALL_DELAY_MS = 2_200
+
+/** Expand the article window to 96 h if fewer than this many are available. */
+const MIN_ARTICLES_FOR_CLUSTERING = 5
+
+// ─── Source metadata ──────────────────────────────────────────────────────────
 
 export const SOURCES_METADATA: Record<
   string,
@@ -27,6 +57,12 @@ export const SOURCES_METADATA: Record<
   eldestape:   { name: 'El Destape',          url: 'https://www.eldestapeweb.com',      color: '#e53e3e', ideologyScore: -0.5, ideologyLabel: 'Centro-izquierda' },
   mdzol:       { name: 'MDZ Online',          url: 'https://www.mdzol.com',             color: '#0077b6', ideologyScore:  0.0, ideologyLabel: 'Centro'           },
   minutouno:   { name: 'Minuto Uno',          url: 'https://www.minutouno.com',         color: '#e67e22', ideologyScore: -0.2, ideologyLabel: 'Centro'           },
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function sleep(ms: number) {
+  return new Promise<void>(r => setTimeout(r, ms))
 }
 
 async function ensureSources(): Promise<Record<string, number>> {
@@ -47,28 +83,25 @@ async function ensureSources(): Promise<Record<string, number>> {
   return bySlug
 }
 
-function sleep(ms: number) {
-  return new Promise(r => setTimeout(r, ms))
-}
-
-/** Marca artículos como procesados en lote para limpiar el queue. */
 async function markProcessed(ids: number[]) {
   if (ids.length === 0) return
   await db.update(rawArticles).set({ clustered: true }).where(inArray(rawArticles.id, ids))
 }
 
 /**
- * Fetch articles eligible for clustering in the given time window.
- * Includes both unclustered articles AND singletons from previous runs
- * (articles marked clustered=true that never made it into cluster_articles).
+ * Returns articles eligible for clustering within the given time window.
+ *
+ * "Eligible" means the article does NOT already appear in cluster_articles.
+ * This catches both fresh (clustered=false) articles AND singletons from
+ * previous runs that were marked clustered=true but never got a cluster entry.
  */
 async function fetchClusterableArticles(cutoff: Date) {
-  // IDs already assigned to a real cluster within the window
   const inClusterRows = await db
     .select({ articleId: clusterArticles.articleId })
     .from(clusterArticles)
     .innerJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
     .where(gte(rawArticles.scrapedAt, cutoff))
+
   const inClusterIds = new Set(inClusterRows.map(r => r.articleId))
 
   const allRecent = await db
@@ -82,27 +115,24 @@ async function fetchClusterableArticles(cutoff: Date) {
     .from(rawArticles)
     .where(gte(rawArticles.scrapedAt, cutoff))
 
-  // Include: genuinely unclustered + previous-run singletons (clustered=true but no cluster entry)
   const toProcess = allRecent.filter(a => !inClusterIds.has(a.id))
   return { allRecent, toProcess, inClusterIds }
 }
 
-export async function runPipeline() {
-  console.log('[pipeline] Starting...')
+// ─── Phase 1: Ingest ──────────────────────────────────────────────────────────
 
-  // Fail-fast si faltan env vars críticas
-  if (!process.env.DATABASE_URL) throw new Error('[pipeline] DATABASE_URL no está configurada')
-  if (!process.env.GROQ_API_KEY)  throw new Error('[pipeline] GROQ_API_KEY no está configurada')
+/**
+ * Scrape all RSS feeds and persist new articles.
+ * Designed to complete in ≤ 20 s (12 feeds × 12 s timeout, parallel).
+ */
+export async function runIngest(): Promise<{ newArticles: number; sourceCount: number }> {
+  if (!process.env.DATABASE_URL) throw new Error('[ingest] DATABASE_URL is not set')
 
-  // 1. Asegurar que existan las fuentes
   const sourceIds = await ensureSources()
-  console.log('[pipeline] Sources ensured:', Object.keys(sourceIds).length)
 
-  // 2. Scraping RSS de todos los medios
   const scraperResults = await runAllScrapers()
-  console.log('[pipeline] Scraped', scraperResults.length, 'sources')
+  console.log(`[ingest] Scraped ${scraperResults.length} sources`)
 
-  // 3. Guardar artículos nuevos (dedup por URL)
   let newCount = 0
   for (const { slug, articles } of scraperResults) {
     const sourceId = sourceIds[slug]
@@ -123,44 +153,58 @@ export async function runPipeline() {
           })
           .onConflictDoNothing()
         newCount++
-      } catch { /* URL duplicada — ignorar */ }
+      } catch { /* duplicate URL — skip */ }
     }
   }
-  console.log('[pipeline] Saved', newCount, 'new articles')
 
-  // 4. Articles to cluster — start with 48h window, auto-expand to 96h if thin.
-  // Includes unclustered new articles AND previous-run singletons (already
-  // marked clustered=true but never actually assigned to a cluster entry).
-  const WINDOW_48H = new Date(Date.now() - 48 * 60 * 60 * 1000)
-  const WINDOW_96H = new Date(Date.now() - 96 * 60 * 60 * 1000)
-  const MIN_ARTICLES = 5 // expand window if fewer than this
+  console.log(`[ingest] Saved ${newCount} new articles`)
+  return { newArticles: newCount, sourceCount: scraperResults.length }
+}
 
-  let { allRecent: allRecentArticles, toProcess: recentArticles } =
-    await fetchClusterableArticles(WINDOW_48H)
+// ─── Phase 2: Cluster ─────────────────────────────────────────────────────────
 
-  if (recentArticles.length < MIN_ARTICLES) {
-    console.log(
-      `[pipeline] Content thin (${recentArticles.length} articles in 48h) — expanding window to 96h`
-    )
-    ;({ allRecent: allRecentArticles, toProcess: recentArticles } =
-      await fetchClusterableArticles(WINDOW_96H))
-  }
+/**
+ * Cluster up to `maxArticles` unclustered articles and persist the cluster
+ * records WITHOUT synthesis (synthesis = null).
+ *
+ * Synthesis is intentionally deferred to Phase 3 so this phase can return
+ * quickly. The provisional title is the top article's title; Phase 3 replaces
+ * it with the AI-generated one.
+ *
+ * Designed to complete in ≤ 60 s (TF-IDF is instant; AI clustering adds
+ * one Groq call per topic with 2.5 s spacing between topics).
+ */
+export async function runCluster(
+  maxArticles = 80
+): Promise<{ clustersCreated: number; singletons: number }> {
+  if (!process.env.DATABASE_URL) throw new Error('[cluster] DATABASE_URL is not set')
+  if (!process.env.GROQ_API_KEY)  throw new Error('[cluster] GROQ_API_KEY is not set')
 
-  console.log(
-    `[pipeline] Articles to cluster: ${recentArticles.length}` +
-    ` (${allRecentArticles.length} total recent, ${allRecentArticles.length - recentArticles.length} already in clusters)`
-  )
-  if (recentArticles.length < 2) {
-    console.log('[pipeline] Not enough articles to cluster, done.')
-    return
-  }
-
-  // Mapa sourceId → { slug, name }
+  // Build source map
   const allSources = await db.select().from(sources)
   const sourceMap: Record<number, { slug: string; name: string }> = {}
   for (const s of allSources) sourceMap[s.id] = { slug: s.slug, name: s.name }
 
-  const inputs: ArticleInput[] = recentArticles
+  // Fetch eligible articles (48 h window, expand to 96 h if thin)
+  const WINDOW_48H = new Date(Date.now() - 48 * 60 * 60 * 1000)
+  const WINDOW_96H = new Date(Date.now() - 96 * 60 * 60 * 1000)
+
+  let { toProcess: eligible } = await fetchClusterableArticles(WINDOW_48H)
+  if (eligible.length < MIN_ARTICLES_FOR_CLUSTERING) {
+    console.log(`[cluster] Thin content (${eligible.length} in 48 h) — expanding to 96 h`)
+    ;({ toProcess: eligible } = await fetchClusterableArticles(WINDOW_96H))
+  }
+
+  // Cap to maxArticles for this run
+  const batch = eligible.slice(0, maxArticles)
+  console.log(`[cluster] Processing ${batch.length} articles (${eligible.length} eligible)`)
+
+  if (batch.length < 2) {
+    console.log('[cluster] Not enough articles — done')
+    return { clustersCreated: 0, singletons: 0 }
+  }
+
+  const inputs: ArticleInput[] = batch
     .filter(a => sourceMap[a.sourceId])
     .map(a => ({
       id:         a.id,
@@ -169,74 +213,44 @@ export async function runPipeline() {
       sourceSlug: sourceMap[a.sourceId].slug,
     }))
 
-  // 5. Clustering semántico vía Groq (más preciso que TF-IDF para noticias en español)
-  // Fallback a TF-IDF si Groq falla
+  // Multi-stage clustering (AI with TF-IDF fallback)
   let clusters = await clusterArticlesWithAI(inputs).catch(err => {
-    console.warn('[pipeline] AI clustering failed, falling back to TF-IDF:', err)
+    console.warn('[cluster] AI clustering failed, falling back to TF-IDF:', err)
     return clusterArticlesTFIDF(inputs)
   })
   if (clusters.length === 0) {
-    console.log('[pipeline] AI clustering found 0 clusters, trying TF-IDF fallback')
+    console.log('[cluster] AI produced 0 clusters — trying TF-IDF fallback')
     clusters = clusterArticlesTFIDF(inputs)
   }
-  console.log('[pipeline] Found', clusters.length, 'clusters')
+  console.log(`[cluster] Found ${clusters.length} clusters`)
 
-  // ── Marcar singletons como procesados de inmediato ──────────────────────
-  // Artículos que no coincidieron con ningún otro no van a aparecer en
-  // ningún cluster. Marcarlos ahora libera el queue y evita que se
-  // re-intenten en cada corrida.
+  // Mark singletons immediately so they don't queue-up forever
   const articlesInClusters = new Set(clusters.flatMap(c => c.articleIds))
   const singletonIds = inputs.filter(a => !articlesInClusters.has(a.id)).map(a => a.id)
   if (singletonIds.length > 0) {
     await markProcessed(singletonIds)
-    console.log(`[pipeline] Marked ${singletonIds.length} singleton articles as processed`)
+    console.log(`[cluster] Marked ${singletonIds.length} singletons as processed`)
   }
 
-  // Limitar a MAX_CLUSTERS_PER_RUN para no exceder el timeout ni el rate-limit
-  const toProcess = clusters.slice(0, MAX_CLUSTERS_PER_RUN)
-  if (clusters.length > MAX_CLUSTERS_PER_RUN) {
-    console.log(`[pipeline] Processing ${MAX_CLUSTERS_PER_RUN}/${clusters.length} clusters this run, rest next hour`)
-  }
+  // Persist clusters WITHOUT synthesis — Phase 3 will fill that in
+  let created = 0
+  for (const cluster of clusters) {
+    const arts = batch.filter(a => cluster.articleIds.includes(a.id))
+    if (arts.length < 2) continue
 
-  // 6. Sintetizar y guardar cada cluster
-  let saved = 0
-  for (let i = 0; i < toProcess.length; i++) {
-    const cluster = toProcess[i]
-    const arts = recentArticles.filter(a => cluster.articleIds.includes(a.id))
     const articleIds = arts.map(a => a.id)
+    const imageUrl   = arts.find(a => a.imageUrl)?.imageUrl ?? null
 
-    const artsForSynthesis: ArticleForSynthesis[] = arts
-      .filter(a => sourceMap[a.sourceId])
-      .map(a => ({
-        sourceName: sourceMap[a.sourceId].name,
-        sourceSlug: sourceMap[a.sourceId].slug,
-        title:      a.title,
-        summary:    a.summary || '',
-        url:        '',
-      }))
+    // Provisional title from the first article — replaced by AI in Phase 3
+    const provisionalTitle = arts[0].title
 
-    // Pausa antes de cada llamada a Groq (excepto la primera) para evitar 429
-    if (i > 0) await sleep(GROQ_CALL_DELAY_MS)
-
-    const synthesis = await synthesizeCluster(artsForSynthesis)
-
-    if (!synthesis) {
-      // Síntesis falló: marcar igualmente como procesados para no re-intentar
-      console.warn(`[pipeline] Synthesis failed for cluster ${i + 1}/${toProcess.length} (${artsForSynthesis.map(a => a.sourceSlug).join(', ')}) — marking as processed`)
-      await markProcessed(articleIds)
-      continue
-    }
-
-    const imageUrl = arts.find(a => a.imageUrl)?.imageUrl ?? null
-
-    // Guardar cluster
     const [savedCluster] = await db
       .insert(newsClusters)
       .values({
-        title:       synthesis.title,
-        synthesis:   synthesis.synthesis,
-        keyFacts:    synthesis.keyFacts,
-        category:    synthesis.category,
+        title:       provisionalTitle,
+        synthesis:   null,           // ← filled by runSynthesize
+        keyFacts:    null,
+        category:    null,
         publishedAt: new Date(),
         sourceCount: new Set(cluster.sourceSlugs).size,
         imageUrl,
@@ -248,27 +262,176 @@ export async function runPipeline() {
       continue
     }
 
-    // Guardar cluster_articles y marcar artículos como procesados
-    const saBySlug: Record<string, (typeof synthesis.sourceAnalyses)[0]> = {}
-    for (const sa of synthesis.sourceAnalyses) saBySlug[sa.sourceSlug] = sa
-
+    // Link articles to cluster (no emphasis/omissions yet)
     for (const art of arts) {
-      const slug = sourceMap[art.sourceId]?.slug
-      const sa   = slug ? saBySlug[slug] : undefined
-      await db.insert(clusterArticles).values({
-        clusterId:           savedCluster.id,
-        articleId:           art.id,
-        coveragePercentage:  sa?.coveragePercentage ?? 0,
-        emphasis:            sa?.emphasis ?? '',
-        omissions:           sa?.omissions ?? '',
-        similarityScore:     cluster.similarityScores[art.id] ?? 0,
-      }).onConflictDoNothing()
+      await db
+        .insert(clusterArticles)
+        .values({
+          clusterId:          savedCluster.id,
+          articleId:          art.id,
+          coveragePercentage: 0,
+          emphasis:           '',
+          omissions:          '',
+          similarityScore:    cluster.similarityScores[art.id] ?? 0,
+        })
+        .onConflictDoNothing()
     }
 
     await markProcessed(articleIds)
-    saved++
-    console.log(`[pipeline] ✓ Cluster ${i + 1}/${toProcess.length}: "${synthesis.title}" (${arts.length} articles)`)
+    created++
+    console.log(
+      `[cluster] ✓ Cluster ${created}: "${provisionalTitle.slice(0, 60)}" (${arts.length} articles)`
+    )
   }
 
-  console.log(`[pipeline] Complete — ${saved}/${toProcess.length} clusters saved`)
+  console.log(`[cluster] Done — ${created} clusters created, ${singletonIds.length} singletons`)
+  return { clustersCreated: created, singletons: singletonIds.length }
+}
+
+// ─── Phase 3: Synthesize ──────────────────────────────────────────────────────
+
+/**
+ * Synthesize up to `maxClusters` clusters that have synthesis = null.
+ *
+ * For each cluster, calls Groq to produce a neutral title, synthesis paragraph,
+ * key facts, category, and per-source emphasis/omissions analysis. Updates the
+ * cluster and its cluster_articles rows in place.
+ *
+ * If synthesis fails, the cluster record is DELETED (along with its
+ * cluster_articles) so the constituent articles re-enter the eligible pool on
+ * the next pipeline run rather than being silently buried.
+ *
+ * At 2.2 s between Groq calls: 10 clusters ≈ 80 s → fits in maxDuration=120.
+ */
+export async function runSynthesize(
+  maxClusters = 10
+): Promise<{ synthesized: number; failed: number }> {
+  if (!process.env.DATABASE_URL) throw new Error('[synthesize] DATABASE_URL is not set')
+  if (!process.env.GROQ_API_KEY)  throw new Error('[synthesize] GROQ_API_KEY is not set')
+
+  // Pending clusters — synthesis = null, ordered oldest-first
+  const pending = await db
+    .select()
+    .from(newsClusters)
+    .where(isNull(newsClusters.synthesis))
+    .limit(maxClusters)
+
+  if (pending.length === 0) {
+    console.log('[synthesize] No pending clusters — done')
+    return { synthesized: 0, failed: 0 }
+  }
+  console.log(`[synthesize] Processing ${pending.length} pending clusters`)
+
+  // Source map (id → { slug, name })
+  const allSources = await db.select().from(sources)
+  const sourceMap: Record<number, { slug: string; name: string }> = {}
+  for (const s of allSources) sourceMap[s.id] = { slug: s.slug, name: s.name }
+
+  let synthesized = 0
+  let failed = 0
+
+  for (let i = 0; i < pending.length; i++) {
+    const cluster = pending[i]
+
+    // Fetch this cluster's articles with their source info
+    const articleRows = await db
+      .select({
+        ca:      clusterArticles,
+        article: rawArticles,
+        source:  sources,
+      })
+      .from(clusterArticles)
+      .innerJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
+      .innerJoin(sources,     eq(sources.id,     rawArticles.sourceId))
+      .where(eq(clusterArticles.clusterId, cluster.id))
+
+    // Need at least 2 articles from different sources
+    const distinctSources = new Set(articleRows.map(r => r.source.slug))
+    if (articleRows.length < 2 || distinctSources.size < 2) {
+      console.warn(`[synthesize] Cluster ${cluster.id} has <2 sources — deleting`)
+      await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
+      await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
+      failed++
+      continue
+    }
+
+    const artsForSynthesis: ArticleForSynthesis[] = articleRows.map(r => ({
+      sourceName: r.source.name,
+      sourceSlug: r.source.slug,
+      title:      r.article.title,
+      summary:    r.article.summary || '',
+      url:        r.article.url,
+    }))
+
+    // Throttle: pause before all calls except the first
+    if (i > 0) await sleep(GROQ_CALL_DELAY_MS)
+
+    const synthesis = await synthesizeCluster(artsForSynthesis)
+
+    if (!synthesis) {
+      console.warn(
+        `[synthesize] Synthesis failed for cluster ${cluster.id} — deleting for retry`
+      )
+      // Delete cluster + its links so articles re-enter the eligible pool
+      await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
+      await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
+      failed++
+      continue
+    }
+
+    // Update cluster with AI-generated content
+    await db
+      .update(newsClusters)
+      .set({
+        title:     synthesis.title,
+        synthesis: synthesis.synthesis,
+        keyFacts:  synthesis.keyFacts,
+        category:  synthesis.category,
+      })
+      .where(eq(newsClusters.id, cluster.id))
+
+    // Update per-source analysis in cluster_articles
+    const saBySlug: Record<string, (typeof synthesis.sourceAnalyses)[0]> = {}
+    for (const sa of synthesis.sourceAnalyses) saBySlug[sa.sourceSlug] = sa
+
+    for (const { ca, source } of articleRows) {
+      const sa = saBySlug[source.slug]
+      if (!sa) continue
+      await db
+        .update(clusterArticles)
+        .set({
+          coveragePercentage: sa.coveragePercentage,
+          emphasis:           sa.emphasis,
+          omissions:          sa.omissions,
+        })
+        .where(
+          and(
+            eq(clusterArticles.clusterId, cluster.id),
+            eq(clusterArticles.articleId, ca.articleId)
+          )
+        )
+    }
+
+    synthesized++
+    console.log(
+      `[synthesize] ✓ Cluster ${cluster.id}: "${synthesis.title.slice(0, 60)}" (${articleRows.length} articles)`
+    )
+  }
+
+  console.log(`[synthesize] Done — ${synthesized} synthesized, ${failed} deleted/failed`)
+  return { synthesized, failed }
+}
+
+// ─── Legacy wrapper (manual triggers / dev) ───────────────────────────────────
+
+/**
+ * Run the full pipeline sequentially in one call.
+ * Used for manual admin triggers. NOT used by the cron endpoint.
+ */
+export async function runPipeline() {
+  console.log('[pipeline] Starting full run...')
+  const ingest   = await runIngest()
+  const cluster  = await runCluster(80)
+  const synth    = await runSynthesize(50)
+  console.log('[pipeline] Complete', { ingest, cluster, synth })
 }

@@ -5,7 +5,7 @@
  */
 
 import { db, newsClusters, clusterArticles, rawArticles, sources, clusterComments } from './db'
-import { eq, desc, sql, isNotNull } from 'drizzle-orm'
+import { eq, desc, sql, isNotNull, ne, and } from 'drizzle-orm'
 
 export async function getNewsClustersServer(
   page = 1,
@@ -21,7 +21,15 @@ export async function getNewsClustersServer(
       .leftJoin(clusterArticles, eq(clusterArticles.clusterId, newsClusters.id))
       .leftJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
       .leftJoin(sources, eq(sources.id, rawArticles.sourceId))
-      .where(category ? eq(newsClusters.category, category) : undefined)
+      // Only show fully synthesized clusters — pending ones (synthesis = null)
+      // are invisible to readers until Phase 3 completes.
+      .where(
+        and(
+          isNotNull(newsClusters.synthesis),
+          ne(newsClusters.synthesis, ''),
+          category ? eq(newsClusters.category, category) : undefined
+        )
+      )
       .orderBy(desc(newsClusters.publishedAt))
 
     const clusterMap = new Map<
@@ -67,7 +75,8 @@ export async function getStatsServer() {
       await Promise.all([
         db
           .select({ total_clusters: sql<number>`count(*)::int` })
-          .from(newsClusters),
+          .from(newsClusters)
+          .where(and(isNotNull(newsClusters.synthesis), ne(newsClusters.synthesis, ''))),
         db
           .select({ total_articles: sql<number>`count(*)::int` })
           .from(rawArticles),
@@ -174,7 +183,13 @@ export async function getCategoriesServer() {
         count: sql<number>`count(*)::int`.as('count'),
       })
       .from(newsClusters)
-      .where(isNotNull(newsClusters.category))
+      .where(
+        and(
+          isNotNull(newsClusters.synthesis),
+          ne(newsClusters.synthesis, ''),
+          isNotNull(newsClusters.category)
+        )
+      )
       .groupBy(newsClusters.category)
       .orderBy(desc(sql`count(*)`))
       .then(rows => rows.filter(r => r.category) as { category: string; count: number }[])
