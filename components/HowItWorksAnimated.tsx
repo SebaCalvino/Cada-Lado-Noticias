@@ -17,8 +17,8 @@ const STEPS = [
   },
   {
     step: '03',
-    title: 'Síntesis imparcial y comparación de coberturas',
-    desc: 'Generamos una síntesis neutra basada en los hechos verificables. Luego comparamos qué destaca cada medio, qué datos aporta y — lo más revelador — qué omite deliberadamente.',
+    title: 'Síntesis imparcial + comparación',
+    desc: 'Generamos una síntesis neutra basada en los hechos verificables. Luego comparamos qué destaca cada medio, qué datos aporta y — lo más revelador — qué deja afuera deliberadamente.',
     detail: 'Síntesis neutral + cobertura comparada por fuente',
   },
 ]
@@ -51,51 +51,84 @@ export default function HowItWorksAnimated() {
 
   return (
     <section ref={ref} className="max-w-6xl mx-auto px-4 py-20 md:py-28">
+
       {/* Section header */}
       <div
         className={`mb-16 transition-all duration-700 ease-out ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
         style={{ transitionDelay: '0ms' }}
       >
-        <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold mb-3">
+        <p
+          style={{
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: 'var(--ink-mute)',
+            fontWeight: 500,
+            marginBottom: 12,
+          }}
+        >
           El proceso
         </p>
-        <h2 className="text-3xl md:text-4xl font-serif font-bold text-gray-900 leading-tight">
+        <h2
+          className="font-serif leading-tight"
+          style={{ fontSize: 'clamp(26px, 4vw, 38px)', color: 'var(--ink)', fontWeight: 400 }}
+        >
           ¿Cómo funciona?
         </h2>
-        <div className="mt-4 h-px bg-gray-200 w-16" />
+        <div className="mt-4 h-px w-12" style={{ background: 'var(--line-strong)' }} />
       </div>
 
       {/* Steps */}
-      <div className="grid md:grid-cols-3 gap-0 md:gap-12">
+      <div className="grid md:grid-cols-3 gap-12 md:gap-14">
         {STEPS.map((item, i) => (
           <div
             key={item.step}
-            className={`relative transition-all duration-700 ease-out ${
+            className={`transition-all duration-700 ease-out ${
               inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
             }`}
             style={{ transitionDelay: `${i * 160 + 100}ms`, transitionDuration: '700ms' }}
           >
-            {/* Connector line between steps (desktop) */}
-            {i < STEPS.length - 1 && (
-              <div className="hidden md:block absolute top-6 left-full w-12 h-px bg-gray-200 z-0" style={{ left: 'calc(100% + 1px)' }} />
-            )}
-
             {/* Step number */}
             <div className="flex items-center gap-4 mb-6">
-              <span className="text-5xl font-serif font-bold text-gray-100 select-none leading-none">
+              <span
+                className="font-serif select-none leading-none"
+                style={{ fontSize: 52, fontWeight: 700, color: 'var(--surface-3)' }}
+              >
                 {item.step}
               </span>
-              <div className="h-px flex-1 bg-gray-100 md:hidden" />
+              <div className="h-px flex-1 md:hidden" style={{ background: 'var(--line)' }} />
             </div>
 
             {/* Content */}
-            <h3 className="text-lg font-bold text-gray-900 mb-3 leading-snug">
+            <h3
+              className="font-serif leading-snug mb-3"
+              style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)' }}
+            >
               {item.title}
             </h3>
-            <p className="text-sm text-gray-500 leading-relaxed mb-4">
+            <p
+              className="leading-relaxed mb-5"
+              style={{ fontSize: 14, color: 'var(--ink-dim)' }}
+            >
               {item.desc}
             </p>
-            <span className="inline-block text-[10px] uppercase tracking-widest text-brand-600 font-bold border border-brand-100 bg-brand-50 px-2 py-1">
+
+            {/* Detail badge */}
+            <span
+              style={{
+                display: 'inline-block',
+                fontSize: 10,
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                fontWeight: 600,
+                color: 'var(--cada-blue)',
+                border: '1px solid var(--left-bg)',
+                background: 'var(--left-bg)',
+                padding: '4px 10px',
+              }}
+            >
               {item.detail}
             </span>
           </div>

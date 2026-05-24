@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { Instagram, Facebook, Twitter, Youtube, Send } from 'lucide-react'
+import { Github, Linkedin } from 'lucide-react'
 import { getNews } from '@/lib/api'
 
 export default async function Footer() {
@@ -11,32 +11,41 @@ export default async function Footer() {
   } catch {}
 
   const sections = [
-    { label: 'Inicio', href: '/' },
-    { label: 'Noticias', href: '/noticias' },
-    { label: 'Política', href: '/noticias?category=Política' },
-    { label: 'Economía', href: '/noticias?category=Economía' },
-    { label: 'Sociedad', href: '/noticias?category=Sociedad' },
-    { label: 'Deportes', href: '/noticias?category=Deportes' },
+    { label: 'Inicio',        href: '/' },
+    { label: 'Noticias',      href: '/noticias' },
+    { label: 'Política',      href: '/noticias?category=Política' },
+    { label: 'Economía',      href: '/noticias?category=Economía' },
+    { label: 'Sociedad',      href: '/noticias?category=Sociedad' },
+    { label: 'Deportes',      href: '/noticias?category=Deportes' },
     { label: 'Internacional', href: '/noticias?category=Internacional' },
-    { label: 'Medios', href: '/fuentes' },
+    { label: 'Medios',        href: '/fuentes' },
   ]
 
   const medios = [
-    { name: 'Clarín', url: 'https://www.clarin.com' },
-    { name: 'La Nación', url: 'https://www.lanacion.com.ar' },
-    { name: 'Infobae', url: 'https://www.infobae.com' },
-    { name: 'Página 12', url: 'https://www.pagina12.com.ar' },
-    { name: 'Ámbito', url: 'https://www.ambito.com' },
-    { name: 'El Cronista', url: 'https://www.cronista.com' },
-    { name: 'Perfil', url: 'https://www.perfil.com' },
+    { name: 'Clarín',         url: 'https://www.clarin.com' },
+    { name: 'La Nación',      url: 'https://www.lanacion.com.ar' },
+    { name: 'Infobae',        url: 'https://www.infobae.com' },
+    { name: 'Página 12',      url: 'https://www.pagina12.com.ar' },
+    { name: 'Ámbito',         url: 'https://www.ambito.com' },
+    { name: 'El Cronista',    url: 'https://www.cronista.com' },
+    { name: 'Perfil',         url: 'https://www.perfil.com' },
     { name: 'La Izq. Diario', url: 'https://www.laizquierdadiario.com' },
   ]
 
   return (
-    <footer className="bg-cada-dark text-gray-300">
-      {/* Main footer */}
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+    <footer className="bg-cada-dark">
+      <style>{`
+        .footer-link { font-size: 13px; color: #8a8580; transition: color 0.15s; }
+        .footer-link:hover { color: #fff; }
+        .footer-icon-btn { width:34px; height:34px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.12); color:#8a8580; transition: border-color 0.15s, color 0.15s; }
+        .footer-icon-btn:hover { border-color: rgba(255,255,255,0.32); color: #fff; }
+        .footer-bottom-link { font-size: 12px; color: #5a5652; transition: color 0.15s; }
+        .footer-bottom-link:hover { color: #d1cdc7; }
+      `}</style>
+
+      {/* Main footer grid */}
+      <div className="max-w-6xl mx-auto px-4 py-14">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
 
           {/* Brand column */}
           <div className="md:col-span-1">
@@ -46,57 +55,59 @@ export default async function Footer() {
                 alt="Cada Lado Noticias"
                 width={160}
                 height={40}
-                className="object-contain h-9 w-auto opacity-90 hover:opacity-100 transition-opacity brightness-0 invert"
+                className="object-contain h-8 w-auto opacity-80 hover:opacity-100 transition-opacity brightness-0 invert"
               />
             </Link>
-            <p className="text-sm text-gray-400 leading-relaxed mb-6">
-              La misma noticia, todas las voces. Sin que te vendan humo.
+            <p style={{ fontSize: 14, color: '#8a8580', lineHeight: 1.65, marginBottom: 20 }}>
+              La misma noticia, todas las voces.
+              Sin que te vendan humo.
             </p>
-            {/* Social icons */}
-            <div className="flex gap-3 mb-6">
-              {[
-                { Icon: Instagram, href: '#', label: 'Instagram' },
-                { Icon: Facebook, href: '#', label: 'Facebook' },
-                { Icon: Twitter, href: '#', label: 'X/Twitter' },
-                { Icon: Youtube, href: '#', label: 'YouTube' },
-                { Icon: Send, href: '#', label: 'Telegram' },
-              ].map(({ Icon, href, label }) => (
-                <a key={label} href={href} aria-label={label}
-                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                  <Icon size={14} />
-                </a>
-              ))}
+
+            {/* GitHub + LinkedIn */}
+            <div className="flex gap-2">
+              <a
+                href="https://github.com/Arkhram-Organization/Cada-Lado-Noticias"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub"
+                className="footer-icon-btn"
+              >
+                <Github size={15} />
+              </a>
+              <a
+                href="https://www.linkedin.com/in/theotrosman"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="LinkedIn"
+                className="footer-icon-btn"
+              >
+                <Linkedin size={15} />
+              </a>
             </div>
           </div>
 
           {/* Últimas noticias */}
           <div>
-            <h3 className="text-white font-semibold text-sm uppercase tracking-wider mb-4 pb-2 border-b border-white/10">
-              Últimas noticias
-            </h3>
+            <FooterHeading>Últimas noticias</FooterHeading>
             <ul className="space-y-3">
               {latestNews.length > 0 ? latestNews.map(n => (
                 <li key={n.id}>
-                  <Link href={`/noticias/${n.id}`}
-                    className="text-sm text-gray-400 hover:text-white transition-colors leading-snug line-clamp-2 block">
+                  <Link href={`/noticias/${n.id}`} className="footer-link block leading-snug line-clamp-2">
                     {n.title}
                   </Link>
                 </li>
               )) : (
-                <li><span className="text-sm text-gray-500">Sin noticias aún</span></li>
+                <li><span style={{ fontSize: 13, color: '#5a5652' }}>Sin noticias aún</span></li>
               )}
             </ul>
           </div>
 
-          {/* Secciones - two column mini-grid */}
+          {/* Secciones */}
           <div>
-            <h3 className="text-white font-semibold text-sm uppercase tracking-wider mb-4 pb-2 border-b border-white/10">
-              Secciones
-            </h3>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <FooterHeading>Secciones</FooterHeading>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
               {sections.map(s => (
-                <Link key={s.href} href={s.href}
-                  className="text-sm text-gray-400 hover:text-white transition-colors">
+                <Link key={s.href} href={s.href} className="footer-link">
                   {s.label}
                 </Link>
               ))}
@@ -105,32 +116,52 @@ export default async function Footer() {
 
           {/* Medios monitoreados */}
           <div>
-            <h3 className="text-white font-semibold text-sm uppercase tracking-wider mb-4 pb-2 border-b border-white/10">
-              Medios monitoreados
-            </h3>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <FooterHeading>Medios monitoreados</FooterHeading>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
               {medios.map(m => (
-                <a key={m.name} href={m.url} target="_blank" rel="noopener noreferrer"
-                  className="text-sm text-gray-400 hover:text-white transition-colors">
+                <a key={m.name} href={m.url} target="_blank" rel="noopener noreferrer" className="footer-link">
                   {m.name}
                 </a>
               ))}
             </div>
           </div>
+
         </div>
       </div>
 
       {/* Bottom bar */}
-      <div className="border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-          <span>© {new Date().getFullYear()} CADA LADO Noticias · Síntesis generada con IA · Argentina</span>
-          <div className="flex gap-4">
-            <Link href="#" className="hover:text-gray-300 transition-colors">Acerca de</Link>
-            <Link href="#" className="hover:text-gray-300 transition-colors">Términos y Condiciones</Link>
-            <Link href="#" className="hover:text-gray-300 transition-colors">Política de privacidad</Link>
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <span style={{ fontSize: 12, color: '#5a5652' }}>
+            © {new Date().getFullYear()} CADA LADO Noticias · Síntesis generada con IA · Argentina
+          </span>
+          <div className="flex gap-5">
+            <Link href="#" className="footer-bottom-link">Acerca de</Link>
+            <Link href="#" className="footer-bottom-link">Términos</Link>
+            <Link href="#" className="footer-bottom-link">Privacidad</Link>
           </div>
         </div>
       </div>
     </footer>
+  )
+}
+
+function FooterHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h3
+      style={{
+        fontSize: 11,
+        fontFamily: 'var(--font-mono)',
+        letterSpacing: '0.14em',
+        textTransform: 'uppercase',
+        color: '#fff',
+        fontWeight: 600,
+        marginBottom: 16,
+        paddingBottom: 10,
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+      }}
+    >
+      {children}
+    </h3>
   )
 }
