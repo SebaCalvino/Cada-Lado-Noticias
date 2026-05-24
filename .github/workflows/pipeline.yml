@@ -1,0 +1,36 @@
+name: Pipeline automático
+
+on:
+  schedule:
+    # Cada 3 horas — sin límites del plan Hobby de Vercel
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+    # También se puede disparar manualmente desde GitHub Actions
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Trigger scraping pipeline
+        run: |
+          echo "Disparando pipeline en $(date -u '+%Y-%m-%d %H:%M UTC')"
+
+          HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 540 \
+            "${{ secrets.APP_URL }}/api/cron/pipeline")
+
+          echo "HTTP status: $HTTP_STATUS"
+          echo "Respuesta:"
+          cat /tmp/response.json
+
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Pipeline falló con status $HTTP_STATUS"
+            exit 1
+          fi
+
+          echo "Pipeline completado correctamente"
