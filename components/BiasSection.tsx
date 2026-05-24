@@ -2,21 +2,37 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+// Parts allow us to highlight individual words in the headline
+type HeadlinePart = { text: string; highlight?: boolean }
+
 const EXAMPLE = {
   event: 'El gobierno anuncia recorte del 15% en el presupuesto educativo',
   left: {
     source: 'Página 12',
     color: '#CC0000',
-    headline: '"Milei destruye la educación pública: miles de docentes sin salario"',
-    emphasis: 'Protestas, impacto social, familias afectadas, críticas sindicales',
-    omits: 'El déficit fiscal que motivó el recorte y el contexto de la deuda',
+    bgTint: '#fff5f5',
+    // "destruye" and "sin salario" are the emotionally charged choices
+    headline: [
+      { text: 'Milei ' },
+      { text: 'destruye', highlight: true },
+      { text: ' la educación pública: miles de docentes ' },
+      { text: 'sin salario', highlight: true },
+    ] as HeadlinePart[],
+    emphasis: 'Las protestas docentes, el impacto en familias, el deterioro del sistema educativo',
+    omits: 'El déficit fiscal que motivó el recorte y el contexto del acuerdo con el FMI',
   },
   right: {
     source: 'La Nación',
     color: '#1A3A5C',
-    headline: '"El Gobierno avanza en el equilibrio fiscal con ajuste en gasto educativo"',
-    emphasis: 'Necesidad del ajuste, metas del FMI, responsabilidad fiscal',
-    omits: 'El impacto concreto en aulas, docentes y familias de bajos recursos',
+    bgTint: '#f5f7fb',
+    // "avance" and "equilibrio fiscal" are the positive framings
+    headline: [
+      { text: 'El Gobierno ' },
+      { text: 'avanza en el equilibrio fiscal', highlight: true },
+      { text: ' con ajuste en el gasto educativo' },
+    ] as HeadlinePart[],
+    emphasis: 'Las metas fiscales, el acuerdo con el FMI, la responsabilidad presupuestaria',
+    omits: 'El impacto real en aulas, docentes y familias de menores recursos',
   },
 }
 
@@ -43,6 +59,14 @@ function useInView(threshold = 0.2) {
   return { ref, inView }
 }
 
+function renderHeadline(parts: HeadlinePart[], color: string) {
+  return parts.map((p, i) =>
+    p.highlight
+      ? <mark key={i} style={{ background: 'none', color, fontWeight: 700, fontStyle: 'inherit' }}>{p.text}</mark>
+      : <span key={i}>{p.text}</span>
+  )
+}
+
 export default function BiasSection() {
   const { ref, inView } = useInView(0.15)
 
@@ -67,7 +91,7 @@ export default function BiasSection() {
             <br />
             <em className="italic" style={{ color: 'var(--ink-dim)' }}>Contada de formas muy distintas.</em>
           </h2>
-          <p className="text-lg max-w-2xl leading-relaxed mb-16" style={{ color: 'var(--ink-dim)', fontFamily: 'var(--font-fraunces), Georgia, serif' }}>
+          <p className="text-base md:text-lg max-w-2xl leading-relaxed mb-16" style={{ color: 'var(--ink-dim)', fontFamily: 'var(--font-fraunces), Georgia, serif' }}>
             Los medios no inventan la noticia — la cuentan desde su propio punto de vista.
             Ese enfoque forma tu opinión sin que lo notes.
           </p>
@@ -78,26 +102,80 @@ export default function BiasSection() {
           className={`transition-all duration-700 ease-out ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
           style={{ transitionDelay: '150ms' }}
         >
-          <div className="px-6 py-4 mb-8 flex items-start gap-4" style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', fontWeight: 600, flexShrink: 0, paddingTop: 2 }}>
+          <div className="flex items-start gap-4 mb-0 px-5 py-4" style={{ border: '1px solid var(--line)', borderBottom: 'none', background: 'var(--surface)' }}>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', fontWeight: 600, flexShrink: 0, paddingTop: 3 }}>
               El hecho
             </span>
-            <p className="font-serif text-base md:text-lg leading-snug" style={{ color: 'var(--ink)' }}>
+            <p className="font-serif text-base md:text-lg leading-snug" style={{ color: 'var(--ink)', margin: 0 }}>
               {EXAMPLE.event}
             </p>
           </div>
         </div>
 
-        {/* Split headline comparison */}
+        {/* ── Comparison cards ── */}
         <div
-          className={`grid md:grid-cols-2 gap-0 transition-all duration-700 ease-out ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+          className={`transition-all duration-700 ease-out ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
           style={{ transitionDelay: '280ms' }}
         >
-          {/* Left source */}
-          <CoverageCard side={EXAMPLE.left} borderRight />
+          {/* Desktop: side-by-side with VS divider */}
+          <div className="hidden md:grid md:grid-cols-[1fr_52px_1fr]">
+            <ComparisonCard side={EXAMPLE.left} />
 
-          {/* Right source */}
-          <CoverageCard side={EXAMPLE.right} />
+            {/* VS column */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid var(--line)',
+                borderLeft: 'none',
+                borderRight: 'none',
+                background: 'var(--surface)',
+                position: 'relative',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  letterSpacing: '0.14em',
+                  color: 'var(--ink-mute)',
+                  writingMode: 'vertical-rl',
+                  textOrientation: 'mixed',
+                  transform: 'rotate(180deg)',
+                  userSelect: 'none',
+                }}
+              >
+                vs
+              </span>
+            </div>
+
+            <ComparisonCard side={EXAMPLE.right} />
+          </div>
+
+          {/* Mobile: stacked */}
+          <div className="md:hidden flex flex-col">
+            <ComparisonCard side={EXAMPLE.left} />
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '10px 20px',
+                border: '1px solid var(--line)',
+                borderTop: 'none',
+                borderBottom: 'none',
+                background: 'var(--surface)',
+              }}
+            >
+              <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.14em', color: 'var(--ink-mute)' }}>vs</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+            </div>
+            <ComparisonCard side={EXAMPLE.right} />
+          </div>
         </div>
 
         {/* Bottom callout */}
@@ -115,60 +193,96 @@ export default function BiasSection() {
   )
 }
 
-function CoverageCard({
-  side,
-  borderRight,
-}: {
-  side: typeof EXAMPLE.left
-  borderRight?: boolean
-}) {
+function ComparisonCard({ side }: { side: typeof EXAMPLE.left }) {
   return (
     <div
-      className="p-6 md:p-8 relative transition-colors"
       style={{
         border: '1px solid var(--line)',
-        borderRight: borderRight ? undefined : '1px solid var(--line)',
-        borderLeft: '1px solid var(--line)',
-        ...(borderRight ? { borderRight: '0' } : {}),
         background: 'var(--surface)',
+        position: 'relative',
+        overflow: 'hidden',
       }}
-      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-      onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
     >
-      {/* Left accent bar */}
-      <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: side.color }} />
+      {/* Color bar — top (mobile) or left (desktop) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          bottom: 0,
+          width: 4,
+          background: side.color,
+        }}
+      />
 
-      <div className="pl-4">
+      <div style={{ paddingLeft: 20, paddingRight: 24, paddingTop: 24, paddingBottom: 24 }}>
+
         {/* Source name */}
-        <div className="flex items-center gap-2 mb-5">
+        <div style={{ marginBottom: 16 }}>
           <span
-            className="text-sm font-bold"
-            style={{ color: side.color }}
+            style={{
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 700,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: side.color,
+            }}
           >
             {side.source}
           </span>
         </div>
 
-        {/* Headline */}
+        {/* Headline — large, italic, with highlighted words */}
         <blockquote
-          className="font-serif text-lg md:text-xl leading-snug mb-6 italic"
-          style={{ color: 'var(--ink)' }}
+          style={{
+            fontFamily: 'var(--font-fraunces), Georgia, serif',
+            fontSize: 'clamp(17px, 2.2vw, 22px)',
+            fontStyle: 'italic',
+            lineHeight: 1.4,
+            color: 'var(--ink)',
+            margin: '0 0 20px 0',
+            padding: 0,
+          }}
         >
-          {side.headline}
+          "{renderHeadline(side.headline, side.color)}"
         </blockquote>
 
-        <div className="space-y-3 text-sm">
+        {/* Metadata rows */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+            <span
+              style={{
+                display: 'block',
+                fontSize: 10,
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-mute)',
+                fontWeight: 600,
+                marginBottom: 4,
+              }}
+            >
               Lo que destaca
             </span>
-            <p style={{ color: 'var(--ink-2)' }}>{side.emphasis}</p>
+            <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>{side.emphasis}</p>
           </div>
           <div>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--right)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+            <span
+              style={{
+                display: 'block',
+                fontSize: 10,
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-mute)',
+                fontWeight: 600,
+                marginBottom: 4,
+              }}
+            >
               Lo que deja afuera
             </span>
-            <p className="italic" style={{ color: 'var(--ink-mute)' }}>{side.omits}</p>
+            <p style={{ fontSize: 13, color: 'var(--ink-mute)', lineHeight: 1.55, margin: 0, fontStyle: 'italic' }}>{side.omits}</p>
           </div>
         </div>
       </div>
