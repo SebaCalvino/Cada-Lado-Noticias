@@ -68,13 +68,17 @@ async function callGroq(userPrompt: string, attempt = 0): Promise<string> {
   })
 
   if (res.status === 429 && attempt < 4) {
-    const wait = Math.pow(2, attempt) * 5000 // 5s, 10s, 20s, 40s
-    console.warn(`[groq] Rate limited, retrying in ${wait / 1000}s (attempt ${attempt + 1})`)
+    // Respetar el header Retry-After de Groq si viene; si no, backoff exponencial
+    const retryAfterHeader = res.headers.get('retry-after')
+    const wait = retryAfterHeader
+      ? Math.ceil(parseFloat(retryAfterHeader)) * 1000
+      : Math.pow(2, attempt) * 8000 // 8s, 16s, 32s, 64s
+    console.warn(`[groq] Rate limited — waiting ${wait / 1000}s (attempt ${attempt + 1}/4)`)
     await new Promise((r) => setTimeout(r, wait))
     return callGroq(userPrompt, attempt + 1)
   }
 
-  if (!res.ok) throw new Error(`Groq API error: ${res.status}`)
+  if (!res.ok) throw new Error(`Groq API error: ${res.status} — ${await res.text().catch(() => '')}`)
   const data = await res.json()
   return data.choices[0].message.content
 }
