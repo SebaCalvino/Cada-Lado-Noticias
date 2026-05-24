@@ -1,5 +1,8 @@
-// TF-IDF cosine similarity clustering
-// Groups articles covering the same news event
+// Clustering híbrido: TF-IDF cosine similarity + agrupación semántica vía Groq
+// El TF-IDF solo falla en noticias argentinas porque cada medio usa vocabulario
+// completamente distinto para el mismo hecho ("dólar sube" vs "tipo de cambio escala").
+// La solución: umbral muy bajo (0.05) para capturar solapamiento parcial, más
+// un paso de agrupación por Groq que entiende sinónimos y contexto semántico.
 
 export interface ArticleInput {
   id: number
@@ -14,37 +17,36 @@ export interface ClusterResult {
   similarityScores: Record<number, number>
 }
 
-const SPANISH_STOP_WORDS = new Set([
-  'de', 'la', 'que', 'el', 'en', 'y', 'a', 'los', 'del', 'se', 'las',
-  'por', 'un', 'para', 'con', 'una', 'su', 'al', 'lo', 'como', 'más',
-  'pero', 'sus', 'le', 'ya', 'o', 'este', 'sí', 'porque', 'esta', 'entre',
-  'cuando', 'muy', 'sin', 'sobre', 'también', 'me', 'hasta', 'hay', 'donde',
-  'quien', 'desde', 'todo', 'nos', 'durante', 'todos', 'uno', 'les', 'ni',
-  'contra', 'otros', 'ese', 'eso', 'ante', 'ellos', 'e', 'esto', 'mí',
-  'antes', 'algunos', 'qué', 'unos', 'yo', 'otro', 'otras', 'otra', 'él',
-  'tanto', 'esa', 'estos', 'mucho', 'quienes', 'nada', 'muchos', 'cual',
-  'poco', 'ella', 'estar', 'estas', 'alguno', 'alguna', 'aunque', 'siempre',
-  'fue', 'ser', 'es', 'son', 'han', 'ha', 'tiene', 'tienen', 'había',
-  'argentina', 'argentino', 'argentinos', 'años', 'año',
+const STOP_WORDS = new Set([
+  'de','la','que','el','en','y','a','los','del','se','las','por','un','para',
+  'con','una','su','al','lo','como','más','pero','sus','le','ya','o','este',
+  'sí','porque','esta','entre','cuando','muy','sin','sobre','también','me',
+  'hasta','hay','donde','quien','desde','todo','nos','durante','todos','uno',
+  'les','ni','contra','otros','ese','eso','ante','ellos','e','esto','antes',
+  'algunos','qué','unos','yo','otro','otras','otra','él','tanto','esa',
+  'estos','mucho','quienes','nada','muchos','cual','poco','ella','estar',
+  'estas','alguno','alguna','aunque','siempre','fue','ser','es','son','han',
+  'ha','tiene','tienen','había','será','están','puede','pueden','debe',
+  'deben','tras','hacia','según','mediante','sido','sido','ser',
+  'argentina','argentino','argentinos','años','año',
 ])
 
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^a-záéíóúñüa-záéíóúñü\s]/gi, ' ')
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '') // quita acentos para mejor match
+    .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
-    .filter((t) => t.length > 2 && !SPANISH_STOP_WORDS.has(t))
+    .filter(t => t.length > 2 && !STOP_WORDS.has(t))
 }
 
 function computeTFIDF(docs: string[][]): Map<string, number>[] {
   const N = docs.length
   const df = new Map<string, number>()
   for (const doc of docs) {
-    for (const term of new Set(doc)) {
-      df.set(term, (df.get(term) || 0) + 1)
-    }
+    for (const term of new Set(doc)) df.set(term, (df.get(term) || 0) + 1)
   }
-  return docs.map((doc) => {
+  return docs.map(doc => {
     const tf = new Map<string, number>()
     for (const term of doc) tf.set(term, (tf.get(term) || 0) + 1)
     const tfidf = new Map<string, number>()
@@ -56,13 +58,10 @@ function computeTFIDF(docs: string[][]): Map<string, number>[] {
   })
 }
 
-function cosineSimilarity(
-  a: Map<string, number>,
-  b: Map<string, number>
-): number {
+function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
   let dot = 0, normA = 0, normB = 0
   for (const [term, val] of a) {
-    dot += val * (b.get(term) || 0)
+    dot   += val * (b.get(term) || 0)
     normA += val * val
   }
   for (const [, val] of b) normB += val * val
@@ -70,23 +69,26 @@ function cosineSimilarity(
   return dot / (Math.sqrt(normA) * Math.sqrt(normB))
 }
 
+/**
+ * Clustering basado en TF-IDF con umbral bajo (0.05).
+ * Alcanza para noticias con algún vocabulario en común.
+ * Para noticias con vocabulario completamente distinto, se usa
+ * clusterArticlesWithAI() en el pipeline.
+ */
 export function clusterArticles(
   articles: ArticleInput[],
-  threshold = 0.12
+  threshold = 0.05   // Bajo: captura más solapamiento parcial
 ): ClusterResult[] {
   if (articles.length < 2) return []
 
-  const docs = articles.map((a) => tokenize(`${a.title} ${a.summary}`))
+  const docs    = articles.map(a => tokenize(`${a.title} ${a.title} ${a.summary}`)) // título x2 para darle más peso
   const vectors = computeTFIDF(docs)
-  const n = articles.length
-  const parent = Array.from({ length: n }, (_, i) => i)
+  const n       = articles.length
+  const parent  = Array.from({ length: n }, (_, i) => i)
   const scores: number[][] = Array.from({ length: n }, () => Array(n).fill(0))
 
   function find(i: number): number {
-    while (parent[i] !== i) {
-      parent[i] = parent[parent[i]]
-      i = parent[i]
-    }
+    while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i] }
     return i
   }
 
@@ -96,8 +98,7 @@ export function clusterArticles(
       const sim = cosineSimilarity(vectors[i], vectors[j])
       scores[i][j] = scores[j][i] = sim
       if (sim >= threshold) {
-        const pi = find(i)
-        const pj = find(j)
+        const pi = find(i), pj = find(j)
         if (pi !== pj) parent[pi] = pj
       }
     }
@@ -113,21 +114,111 @@ export function clusterArticles(
   const clusters: ClusterResult[] = []
   for (const indices of groups.values()) {
     if (indices.length < 2) continue
-    const sourceSlugs = indices.map((i) => articles[i].sourceSlug)
+    const sourceSlugs = indices.map(i => articles[i].sourceSlug)
     if (new Set(sourceSlugs).size < 2) continue
     const simScores: Record<number, number> = {}
     for (const i of indices) {
       let maxSim = 0
-      for (const j of indices) {
-        if (i !== j) maxSim = Math.max(maxSim, scores[i][j])
-      }
+      for (const j of indices) { if (i !== j) maxSim = Math.max(maxSim, scores[i][j]) }
       simScores[articles[i].id] = maxSim
     }
-    clusters.push({
-      articleIds: indices.map((i) => articles[i].id),
-      sourceSlugs,
-      similarityScores: simScores,
-    })
+    clusters.push({ articleIds: indices.map(i => articles[i].id), sourceSlugs, similarityScores: simScores })
   }
   return clusters
+}
+
+/**
+ * Agrupación semántica vía Groq: le pasamos los títulos y nos dice cuáles
+ * cubren el mismo hecho. Mucho más preciso que TF-IDF para noticias argentinas.
+ * Retorna grupos de IDs de artículos.
+ */
+export async function clusterArticlesWithAI(
+  articles: ArticleInput[]
+): Promise<ClusterResult[]> {
+  if (articles.length < 2) return []
+
+  // Groq puede manejar lotes de ~60 títulos cómodamente
+  const BATCH = 60
+  const allClusters: ClusterResult[] = []
+  const usedIds = new Set<number>()
+
+  for (let start = 0; start < articles.length; start += BATCH) {
+    const batch = articles.slice(start, start + BATCH)
+    const numbered = batch
+      .map((a, i) => `${i + 1}. [${a.sourceSlug}] ${a.title}`)
+      .join('\n')
+
+    const prompt = `Tenés estos titulares de medios argentinos. Agrupá los que cubren EXACTAMENTE el mismo hecho noticioso (mismo evento, mismo día). Un artículo puede estar en un solo grupo. Los artículos del MISMO medio NO pueden estar en el mismo grupo.
+
+${numbered}
+
+Respondé SOLO con JSON válido, sin texto adicional:
+{"groups": [[1,3,7], [2,5], [4,6,8]]}
+
+Solo incluí grupos de 2 o más artículos de fuentes distintas. Si no hay grupos, respondé {"groups": []}.`
+
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          max_tokens: 500,
+        }),
+      })
+
+      if (!res.ok) {
+        if (res.status === 429) {
+          await new Promise(r => setTimeout(r, 15000))
+        }
+        continue
+      }
+
+      const data  = await res.json()
+      let raw = data.choices[0].message.content.trim()
+      if (raw.startsWith('```')) raw = raw.replace(/```[a-z]*\n?/g, '').trim()
+
+      const parsed = JSON.parse(raw) as { groups: number[][] }
+
+      for (const group of (parsed.groups || [])) {
+        // group contiene índices 1-based dentro del batch
+        const idxs = group.map(n => n - 1).filter(i => i >= 0 && i < batch.length)
+        if (idxs.length < 2) continue
+
+        const arts = idxs.map(i => batch[i])
+        const slugs = arts.map(a => a.sourceSlug)
+        if (new Set(slugs).size < 2) continue
+
+        // Evitar que un artículo aparezca en múltiples clusters
+        const freshArts = arts.filter(a => !usedIds.has(a.id))
+        if (freshArts.length < 2) continue
+        if (new Set(freshArts.map(a => a.sourceSlug)).size < 2) continue
+
+        for (const a of freshArts) usedIds.add(a.id)
+
+        const simScores: Record<number, number> = {}
+        for (const a of freshArts) simScores[a.id] = 0.5 // score simbólico
+
+        allClusters.push({
+          articleIds:       freshArts.map(a => a.id),
+          sourceSlugs:      freshArts.map(a => a.sourceSlug),
+          similarityScores: simScores,
+        })
+      }
+    } catch (err) {
+      console.warn('[clustering-ai] batch failed:', err)
+    }
+
+    // Pausa entre batches de agrupación
+    if (start + BATCH < articles.length) {
+      await new Promise(r => setTimeout(r, 3000))
+    }
+  }
+
+  return allClusters
 }

@@ -1,7 +1,7 @@
 import { db, sources, rawArticles, newsClusters, clusterArticles } from './db'
 import { eq, and, gte, inArray } from 'drizzle-orm'
 import { runAllScrapers } from './scrapers'
-import { clusterArticles as clusterArticlesFn, type ArticleInput } from './clustering'
+import { clusterArticlesWithAI, clusterArticles as clusterArticlesTFIDF, type ArticleInput } from './clustering'
 import { synthesizeCluster, type ArticleForSynthesis } from './ai'
 
 // Max clusters sintetizados por corrida — previene timeout y rate-limit de Groq.
@@ -131,8 +131,16 @@ export async function runPipeline() {
       sourceSlug: sourceMap[a.sourceId].slug,
     }))
 
-  // 5. Clustering TF-IDF
-  const clusters = clusterArticlesFn(inputs)
+  // 5. Clustering semántico vía Groq (más preciso que TF-IDF para noticias en español)
+  // Fallback a TF-IDF si Groq falla
+  let clusters = await clusterArticlesWithAI(inputs).catch(err => {
+    console.warn('[pipeline] AI clustering failed, falling back to TF-IDF:', err)
+    return clusterArticlesTFIDF(inputs)
+  })
+  if (clusters.length === 0) {
+    console.log('[pipeline] AI clustering found 0 clusters, trying TF-IDF fallback')
+    clusters = clusterArticlesTFIDF(inputs)
+  }
   console.log('[pipeline] Found', clusters.length, 'clusters')
 
   // ── Marcar singletons como procesados de inmediato ──────────────────────
