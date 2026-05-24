@@ -145,6 +145,27 @@ export async function getNewsDetailServer(id: number) {
   }
 }
 
+export async function getSourcesServer() {
+  try {
+    const rows = await db
+      .select()
+      .from(sources)
+      .where(eq(sources.active, true))
+      .orderBy(sources.name)
+    return rows.map(s => ({
+      id:             s.id,
+      slug:           s.slug,
+      name:           s.name,
+      url:            s.url,
+      color:          s.color,
+      ideology_score: s.ideologyScore,
+      ideology_label: s.ideologyLabel ?? null,
+    }))
+  } catch {
+    return []
+  }
+}
+
 export async function getCategoriesServer() {
   try {
     return await db

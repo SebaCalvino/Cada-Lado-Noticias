@@ -1,15 +1,11 @@
-import { getSources } from '@/lib/api'
-import type { Source } from '@/lib/types'
+import { getSourcesServer } from '@/lib/queries'
 import IdeologySpectrum from '@/components/IdeologySpectrum'
 import { ExternalLink } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
 export default async function FuentesPage() {
-  let sources: Source[] = []
-  try {
-    sources = await getSources()
-  } catch {}
+  const sources = await getSourcesServer()
 
   const sorted = [...sources].sort((a, b) => a.ideology_score - b.ideology_score)
 
