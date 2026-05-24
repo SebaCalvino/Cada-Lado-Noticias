@@ -45,35 +45,33 @@ async function handle(request: NextRequest) {
     'Content-Type': 'application/json',
   }
 
-  // ── Always queue the cluster phase in background ──────────────────────────
-  // waitUntil() keeps the Vercel function alive until the fetch resolves.
-  // The cluster route will itself queue synthesize the same way.
-  // We do this BEFORE ingest so it's registered even if ingest throws.
-  const clusterFetch = fetch(`${origin}/api/pipeline/cluster`, { method: 'POST', headers })
-    .then(r => {
-      if (!r.ok) console.warn(`[cron] cluster phase returned HTTP ${r.status}`)
-      else        console.log('[cron] cluster phase accepted')
-    })
-    .catch(err => console.warn('[cron] cluster phase fetch failed:', String(err)))
-
-  waitUntil(clusterFetch)
-
   try {
     // ── Phase 1: Ingest (synchronous) ─────────────────────────────────────────
     const { newArticles, sourceCount, skipped } = await runIngest()
     const ingestMs = Date.now() - t0
 
+    // ── Trigger cluster AFTER ingest so new articles are already in the DB ────
+    // waitUntil() keeps the function alive until the fetch resolves.
+    const clusterFetch = fetch(`${origin}/api/pipeline/cluster`, { method: 'POST', headers })
+      .then(r => {
+        if (!r.ok) console.warn(`[cron] cluster phase returned HTTP ${r.status}`)
+        else        console.log('[cron] cluster phase accepted')
+      })
+      .catch(err => console.warn('[cron] cluster phase fetch failed:', String(err)))
+
+    waitUntil(clusterFetch)
+
     if (skipped) {
-      console.log(`[cron] Ingest skipped (recent scrape) in ${ingestMs} ms — cluster triggered to drain backlog`)
+      console.log(`[cron] Ingest skipped in ${ingestMs} ms — cluster triggered to drain backlog`)
       return NextResponse.json({
         ok:      true,
         skipped: true,
         ingestMs,
-        message: 'Ingest skipped — cluster/synthesize triggered to drain any pending backlog',
+        message: 'Ingest skipped — cluster triggered to drain any pending backlog',
       })
     }
 
-    console.log(`[cron] Ingest done in ${ingestMs} ms — ${newArticles} new articles — cluster phase triggered`)
+    console.log(`[cron] Ingest done in ${ingestMs} ms — ${newArticles} new articles — cluster triggered`)
     return NextResponse.json({
       ok:          true,
       skipped:     false,

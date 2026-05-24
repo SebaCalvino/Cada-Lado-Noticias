@@ -44,20 +44,21 @@ export async function POST(request: NextRequest) {
     'Content-Type': 'application/json',
   }
 
-  // Queue the synthesize phase now — waitUntil keeps the function alive
-  // until the fetch resolves, even after we return the HTTP response.
-  const synthFetch = fetch(`${origin}/api/pipeline/synthesize`, { method: 'POST', headers })
-    .then(r => {
-      if (!r.ok) console.warn(`[cluster] synthesize phase returned HTTP ${r.status}`)
-      else        console.log('[cluster] synthesize phase accepted')
-    })
-    .catch(err => console.warn('[cluster] synthesize phase fetch failed:', String(err)))
-
-  waitUntil(synthFetch)
-
   try {
+    // runCluster must finish FIRST so new clusters are in the DB before
+    // synthesize is triggered — otherwise synthesize finds 0 pending and exits.
     const { clustersCreated, singletons } = await runCluster(40)
     const clusterMs = Date.now() - t0
+
+    // NOW trigger synthesize — clusters are persisted, safe to pick them up
+    const synthFetch = fetch(`${origin}/api/pipeline/synthesize`, { method: 'POST', headers })
+      .then(r => {
+        if (!r.ok) console.warn(`[cluster] synthesize returned HTTP ${r.status}`)
+        else        console.log('[cluster] synthesize phase accepted')
+      })
+      .catch(err => console.warn('[cluster] synthesize fetch failed:', String(err)))
+
+    waitUntil(synthFetch)
 
     console.log(
       `[cluster] Done in ${clusterMs} ms — ${clustersCreated} clusters, ${singletons} singletons — synthesize triggered`
