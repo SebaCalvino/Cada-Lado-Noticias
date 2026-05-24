@@ -227,19 +227,7 @@ export default function HeroAnimated() {
 
             {/* Subtitle + CTAs */}
             <div className="mt-3 md:mt-8">
-              <p
-                className="mb-8 leading-relaxed"
-                style={{
-                  fontFamily: 'var(--font-fraunces), Georgia, serif',
-                  fontSize: '17px',
-                  color: 'var(--ink-dim)',
-                  maxWidth: '460px',
-                }}
-              >
-                La misma noticia contada de forma diferente según cada medio.
-                Comparamos titulares, énfasis y omisiones para que veas la historia completa.
-              </p>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 mt-8">
                 <Link
                   href="/noticias"
                   className="flex items-center gap-2 transition-colors text-sm font-medium"
