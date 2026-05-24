@@ -22,11 +22,12 @@
  */
 
 import { db, sources, rawArticles, newsClusters, clusterArticles } from './db'
-import { eq, and, gte, inArray, isNull } from 'drizzle-orm'
+import { eq, and, gte, inArray, isNull, isNotNull, ne, asc, desc } from 'drizzle-orm'
 import { runAllScrapers } from './scrapers'
 import {
   clusterArticlesWithAI,
   clusterArticles as clusterArticlesTFIDF,
+  scoreClusterQuality,
   type ArticleInput,
 } from './clustering'
 import { synthesizeCluster, type ArticleForSynthesis } from './ai'
@@ -38,6 +39,21 @@ const GROQ_CALL_DELAY_MS = 2_200
 
 /** Expand the article window to 96 h if fewer than this many are available. */
 const MIN_ARTICLES_FOR_CLUSTERING = 5
+
+/**
+ * Skip-if-recent threshold.
+ * If the most-recent article in the DB is younger than this, runIngest() will
+ * return early without hitting the RSS feeds.  Prevents duplicate work when
+ * Vercel or GitHub Actions retries the cron within the same window.
+ */
+const SKIP_IF_SCRAPED_WITHIN_MS = 15 * 60 * 1_000   // 15 minutes
+
+/**
+ * Clusters whose scoreClusterQuality() falls below this value are deleted
+ * by runCleanup().  Empirically: avg title-only TF-IDF cosine < 0.03 and no
+ * shared named entity → the articles are not about the same event.
+ */
+const CLEANUP_QUALITY_THRESHOLD = 0.06
 
 // ─── Source metadata ──────────────────────────────────────────────────────────
 
@@ -124,9 +140,34 @@ async function fetchClusterableArticles(cutoff: Date) {
 /**
  * Scrape all RSS feeds and persist new articles.
  * Designed to complete in ≤ 20 s (12 feeds × 12 s timeout, parallel).
+ *
+ * Returns `skipped: true` (without hitting any RSS feed) when the most-recent
+ * article in the DB is younger than SKIP_IF_SCRAPED_WITHIN_MS.  The caller
+ * should treat a skipped run as a no-op and NOT fire subsequent pipeline phases.
  */
-export async function runIngest(): Promise<{ newArticles: number; sourceCount: number }> {
+export async function runIngest(): Promise<{
+  newArticles: number
+  sourceCount: number
+  skipped: boolean
+}> {
   if (!process.env.DATABASE_URL) throw new Error('[ingest] DATABASE_URL is not set')
+
+  // ── Skip-if-recent guard ───────────────────────────────────────────────────
+  // Prevents duplicate work when Vercel / GitHub Actions retries or overlaps.
+  const [latestScrape] = await db
+    .select({ scrapedAt: rawArticles.scrapedAt })
+    .from(rawArticles)
+    .orderBy(desc(rawArticles.scrapedAt))
+    .limit(1)
+
+  if (latestScrape) {
+    const ageMs  = Date.now() - latestScrape.scrapedAt.getTime()
+    const ageMin = Math.round(ageMs / 60_000)
+    if (ageMs < SKIP_IF_SCRAPED_WITHIN_MS) {
+      console.log(`[ingest] Skipping — last scrape was ${ageMin} min ago (< 15 min threshold)`)
+      return { newArticles: 0, sourceCount: 0, skipped: true }
+    }
+  }
 
   const sourceIds = await ensureSources()
 
@@ -158,7 +199,7 @@ export async function runIngest(): Promise<{ newArticles: number; sourceCount: n
   }
 
   console.log(`[ingest] Saved ${newCount} new articles`)
-  return { newArticles: newCount, sourceCount: scraperResults.length }
+  return { newArticles: newCount, sourceCount: scraperResults.length, skipped: false }
 }
 
 // ─── Phase 2: Cluster ─────────────────────────────────────────────────────────
@@ -422,6 +463,100 @@ export async function runSynthesize(
   return { synthesized, failed }
 }
 
+// ─── Phase 4: Cleanup ─────────────────────────────────────────────────────────
+
+/**
+ * Score and delete low-quality clusters from the visible corpus.
+ *
+ * Works through up to `maxClusters` published clusters (synthesis IS NOT NULL),
+ * ordered oldest-first, and deletes any whose scoreClusterQuality() is below
+ * CLEANUP_QUALITY_THRESHOLD (0.06).
+ *
+ * Clusters with source_count ≥ 3 are skipped — three or more outlets covering
+ * the same story is a strong editorial quality signal that the merge was valid.
+ *
+ * Designed to complete in ≤ 90 s (100 clusters × 1 DB round trip each).
+ * Deleting a cluster also removes its cluster_articles rows; the constituent
+ * rawArticles are left in place (no cluster_articles link means they become
+ * eligible for re-clustering on the next pipeline run).
+ */
+export async function runCleanup(
+  maxClusters = 100
+): Promise<{ deleted: number; checked: number }> {
+  if (!process.env.DATABASE_URL) throw new Error('[cleanup] DATABASE_URL is not set')
+
+  // Candidates: published clusters, oldest first (pre-improvement clusters
+  // are more likely to be bad), limited to keep the call bounded.
+  const candidates = await db
+    .select()
+    .from(newsClusters)
+    .where(
+      and(
+        isNotNull(newsClusters.synthesis),
+        ne(newsClusters.synthesis, '')
+      )
+    )
+    .orderBy(asc(newsClusters.publishedAt))
+    .limit(maxClusters)
+
+  if (candidates.length === 0) {
+    console.log('[cleanup] No published clusters found')
+    return { deleted: 0, checked: 0 }
+  }
+  console.log(`[cleanup] Checking ${candidates.length} clusters...`)
+
+  let checked = 0
+  let deleted = 0
+
+  for (const cluster of candidates) {
+    checked++
+
+    // High source_count is a strong validity signal — skip to avoid false positives
+    if ((cluster.sourceCount ?? 0) >= 3) continue
+
+    // Fetch this cluster's articles for quality scoring
+    const articleRows = await db
+      .select({ article: rawArticles })
+      .from(clusterArticles)
+      .innerJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
+      .where(eq(clusterArticles.clusterId, cluster.id))
+
+    // A cluster with fewer than 2 articles is definitionally invalid
+    if (articleRows.length < 2) {
+      await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
+      await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
+      deleted++
+      console.log(
+        `[cleanup] ✗ Deleted near-empty cluster ${cluster.id} ` +
+        `"${(cluster.title ?? '').slice(0, 60)}" (${articleRows.length} articles)`
+      )
+      continue
+    }
+
+    const inputs: ArticleInput[] = articleRows.map(r => ({
+      id:         r.article.id,
+      title:      r.article.title,
+      summary:    r.article.summary || '',
+      sourceSlug: '',
+    }))
+
+    const score = scoreClusterQuality(inputs)
+
+    if (score < CLEANUP_QUALITY_THRESHOLD) {
+      await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
+      await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
+      deleted++
+      console.log(
+        `[cleanup] ✗ Deleted cluster ${cluster.id} score=${score.toFixed(3)} ` +
+        `"${(cluster.title ?? '').slice(0, 60)}"`
+      )
+    }
+  }
+
+  console.log(`[cleanup] Done — ${deleted} deleted out of ${checked} checked`)
+  return { deleted, checked }
+}
+
 // ─── Legacy wrapper (manual triggers / dev) ───────────────────────────────────
 
 /**
@@ -433,5 +568,6 @@ export async function runPipeline() {
   const ingest   = await runIngest()
   const cluster  = await runCluster(80)
   const synth    = await runSynthesize(50)
-  console.log('[pipeline] Complete', { ingest, cluster, synth })
+  const cleanup  = await runCleanup(100)
+  console.log('[pipeline] Complete', { ingest, cluster, synth, cleanup })
 }

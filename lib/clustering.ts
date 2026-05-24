@@ -1,23 +1,28 @@
 /**
  * Multi-stage clustering for Argentine news headlines.
  *
- * Stage 1 — Topic routing: each article is classified by topic (politics,
- *   economy, sports…) via keyword matching. Articles in DIFFERENT topics
- *   never enter the same comparison batch. This is the primary defense
- *   against false-positive clusters (e.g. "university elections" being
- *   merged with "how cats choose their human").
+ * Stage 1 — Topic routing: keyword-based topic classification.  Articles in
+ *   DIFFERENT topics never enter the same comparison batch — the primary
+ *   defense against cross-topic false positives.
  *
- * Stage 2 — TF-IDF within topic: cosine similarity (threshold 0.15, raised
- *   from the previous 0.05) surfaces obvious same-event pairs cheaply.
+ * Stage 2 — TF-IDF within topic: cosine similarity (threshold 0.22, raised
+ *   from 0.15) plus a named-entity overlap guard.  An article pair only
+ *   merges if their combined title+summary TF-IDF cosine clears the threshold
+ *   AND they share at least one named entity (or neither article has any
+ *   extractable entity, in which case the TF-IDF alone decides).
  *
- * Stage 3 — AI validation (Groq, per-topic batches): remaining within-topic
- *   articles are sent with a strict no-false-positive prompt. The model must
- *   be ≥90% confident to group two articles. Bad examples are shown explicitly.
+ * Stage 3 — AI validation (Groq, per-topic batches): remaining unclustered
+ *   articles within the same topic are sent with a strict no-false-positive
+ *   prompt.  AI-produced clusters also go through the entity overlap guard
+ *   before being accepted.
  *
- * Stage 4 — Coherence guard: every AI-produced cluster is checked with a
- *   lightweight TF-IDF cosine test. Clusters with near-zero vocabulary overlap
- *   (similarity < 0.05 for ALL pairs) are silently dropped — the final safety
- *   net against model hallucination.
+ * Stage 4 — Coherence guard: every cluster (TF-IDF or AI) is verified with
+ *   a lightweight TF-IDF cosine test.  A cluster is rejected if the AVERAGE
+ *   pairwise cosine falls below 0.08, even if some individual pairs are
+ *   similar (previously: any single pair >= 0.05 was enough — too loose).
+ *
+ * Key principle: false negatives (missed clusters) are far better than false
+ * positives (wrong merges).  Every stage is deliberately conservative.
  */
 
 export interface ArticleInput {
@@ -50,10 +55,75 @@ const STOP_WORDS = new Set([
   'primera','segundo','segunda','ultimo','ultima','tras',
 ])
 
+// ── Named entity extraction ───────────────────────────────────────────────────
+//
+// Heuristic approach for Spanish news titles:
+//  • ALL_CAPS sequences ≥ 2 letters (acronyms): FMI, UNC, ONU, UBA, OTAN…
+//  • Capitalized words NOT at position 0 and ≥ 4 chars: proper nouns like
+//    Milei, Putin, Zelensky, Rivera, Clarín, Córdoba, Buenos, Aires…
+//    (position 0 is excluded because Spanish sentences always start capitalised)
+//
+// This is intentionally lightweight — no NLP library, O(words) per title.
+
+function extractEntities(title: string): Set<string> {
+  const entities = new Set<string>()
+  const words = title.split(/\s+/)
+
+  for (let i = 0; i < words.length; i++) {
+    const clean = words[i].replace(/[«»"'.,;:!?()\[\]—–\-]/g, '')
+    if (clean.length < 2) continue
+
+    // Acronyms — at least 2 all-uppercase letters (FMI, UNC, UBA, CONICET, etc.)
+    if (/^[A-ZÁÉÍÓÚÑÜ]{2,}$/.test(clean)) {
+      entities.add(clean.toUpperCase())
+      continue
+    }
+
+    // Capitalised non-initial words (likely proper nouns)
+    // Require ≥ 4 chars to avoid short ambiguous words ("Del", "Paz", "Mar")
+    if (i > 0 && /^[A-ZÁÉÍÓÚÑ]/.test(clean) && clean.length >= 4) {
+      const normalised = clean
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+      entities.add(normalised)
+    }
+  }
+
+  return entities
+}
+
+/**
+ * Returns true if the cluster passes the entity overlap check.
+ *
+ * Conservative logic:
+ *  • If ALL articles have zero extractable entities (e.g. headlines using
+ *    only common nouns), we can't use entities to validate — pass through.
+ *  • If at least half the articles have entities, at least ONE pair must
+ *    share an entity.  If every article has entities but no two share any,
+ *    the articles are almost certainly about different events.
+ */
+function entityCheckPasses(articles: ArticleInput[]): boolean {
+  const sets = articles.map(a => extractEntities(a.title))
+
+  // Count articles with at least one extractable entity
+  const withEntities = sets.filter(s => s.size > 0).length
+
+  // If fewer than half have entities, skip the check (can't be conclusive)
+  if (withEntities < Math.ceil(articles.length / 2)) return true
+
+  // At least one pair must share an entity
+  for (let i = 0; i < sets.length; i++) {
+    for (let j = i + 1; j < sets.length; j++) {
+      for (const e of sets[i]) {
+        if (sets[j].has(e)) return true
+      }
+    }
+  }
+  return false // entities present but none shared
+}
+
 // ── Topic classification ──────────────────────────────────────────────────────
-// Keyword lists use normalized (no diacritics, lower-case) strings.
-// A single article can only belong to ONE topic. Articles in different topics
-// are NEVER compared — eliminating cross-topic false positives entirely.
 
 const TOPIC_KEYWORDS: Record<string, string[]> = {
   politica: [
@@ -148,7 +218,7 @@ function classifyTopic(text: string): string {
   for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS)) {
     let score = 0
     for (const kw of keywords) {
-      if (norm.includes(kw)) score += kw.includes(' ') ? 2 : 1 // multi-word phrases score higher
+      if (norm.includes(kw)) score += kw.includes(' ') ? 2 : 1
     }
     if (score > bestScore) { bestScore = score; bestTopic = topic }
   }
@@ -191,15 +261,16 @@ function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): numbe
 
 /**
  * TF-IDF clustering with union-find.
- * Default threshold raised to 0.15 (was 0.05) to reduce false positives.
- * Used directly as primary clustering when AI is unavailable (fallback).
+ * Threshold raised to 0.22 (was 0.15).  Also applies the entity overlap guard
+ * to the final group results before returning them.
  */
 export function clusterArticles(
   articles: ArticleInput[],
-  threshold = 0.15
+  threshold = 0.22
 ): ClusterResult[] {
   if (articles.length < 2) return []
 
+  // Weight title twice — headline word choice is the core product signal
   const docs    = articles.map(a => tokenize(`${a.title} ${a.title} ${a.summary}`))
   const vectors = computeTFIDF(docs)
   const n       = articles.length
@@ -235,6 +306,17 @@ export function clusterArticles(
     if (indices.length < 2) continue
     const slugs = indices.map(i => articles[i].sourceSlug)
     if (new Set(slugs).size < 2) continue
+
+    const arts = indices.map(i => articles[i])
+
+    // Entity overlap guard: if extractable entities present but none shared → skip
+    if (!entityCheckPasses(arts)) {
+      console.log(
+        `[clustering-tfidf] Entity guard rejected group: [${arts.map(a => a.sourceSlug).join(', ')}] "${arts.map(a => a.title.slice(0, 35)).join('" / "')}"`
+      )
+      continue
+    }
+
     const simScores: Record<number, number> = {}
     for (const i of indices) {
       let best = 0
@@ -251,13 +333,17 @@ export function clusterArticles(
 }
 
 // ── Coherence guard ───────────────────────────────────────────────────────────
-// Rejects a cluster if EVERY pairwise cosine similarity is below MIN_SIM.
-// Catches clusters where the AI grouped articles with near-zero vocabulary
-// overlap (e.g. "Russia attacks Kiev" + "Trump on Iran deal").
+//
+// Rejects a cluster when the AVERAGE pairwise cosine similarity is below
+// COHERENCE_MIN_AVG.  The old check (any single pair >= 0.05) was too loose —
+// one semi-similar pair could smuggle in several unrelated articles.
 
-const COHERENCE_MIN_SIM = 0.05
+const COHERENCE_MIN_AVG = 0.08  // was: any pair >= 0.05
 
-function clusterIsCoherent(articleIds: number[], allArticles: ArticleInput[]): boolean {
+export function clusterIsCoherent(
+  articleIds: number[],
+  allArticles: ArticleInput[]
+): boolean {
   const arts = articleIds
     .map(id => allArticles.find(a => a.id === id))
     .filter(Boolean) as ArticleInput[]
@@ -266,49 +352,50 @@ function clusterIsCoherent(articleIds: number[], allArticles: ArticleInput[]): b
   const docs    = arts.map(a => tokenize(`${a.title} ${a.title} ${a.summary}`))
   const vectors = computeTFIDF(docs)
 
+  let total = 0
+  let pairs = 0
   for (let i = 0; i < arts.length; i++)
-    for (let j = i + 1; j < arts.length; j++)
-      if (cosineSimilarity(vectors[i], vectors[j]) >= COHERENCE_MIN_SIM) return true
+    for (let j = i + 1; j < arts.length; j++) {
+      total += cosineSimilarity(vectors[i], vectors[j])
+      pairs++
+    }
 
-  return false // all pairs have near-zero overlap → unrelated
+  if (pairs === 0) return false
+  return (total / pairs) >= COHERENCE_MIN_AVG
 }
 
 // ── AI clustering (Groq) ──────────────────────────────────────────────────────
 
-/**
- * Strict no-false-positive prompt.
- *
- * Key rules explicitly encoded:
- *  • Articles must share a specific event, NOT just a topic
- *  • Must share at least one named person / org / place
- *  • Negative examples mirror the real bad cases observed in production
- *  • "If in doubt → don't group"
- */
 const STRICT_PROMPT_HEADER = `Sos un editor jefe muy exigente. Tu única tarea: identificar pares de artículos que cubren EXACTAMENTE el mismo evento específico.
 
 REQUISITOS para agrupar (deben cumplirse TODOS):
 1. Mismo hecho puntual — no solo el mismo tema general
-2. Al menos un protagonista, organización o lugar en común
+2. Al menos un protagonista, organización o lugar concreto en común (nombre propio, sigla, ciudad)
 3. Contexto temporal similar (mismo día o período muy cercano)
 4. Confianza ≥ 90%
 
 PROHIBIDO agrupar si:
 • Solo comparten una categoría temática ("economía", "política", "internacional")
-• Comparten una palabra suelta pero hablan de eventos distintos
-• Son de países o instituciones diferentes sin relación directa
+• Comparten una palabra genérica ("elecciones", "privatización", "ataque") pero hablan de eventos distintos
+• Son de países, instituciones o eventos diferentes sin relación directa
+• No comparten ningún nombre propio, sigla o lugar en común
 • Tenés menos del 90% de certeza
 
 EJEMPLOS DE ERRORES GRAVES (nunca hacer esto):
 ❌ "Elecciones en la Facultad de Artes de la UNC" + "Cómo los gatos eligen a su humano preferido"
-   → solo comparten el verbo "elegir" — son temas completamente distintos
+   → solo comparten el verbo "elegir" — instituciones y temas completamente distintos
 ❌ "Rusia lanza ataque con misiles contra Kiev" + "Trump negocia acuerdo con Irán"
-   → ambos son noticias internacionales pero de eventos completamente distintos
-❌ "Milei habla del acuerdo con el FMI" + "El Banco Central sube las tasas de interés"
-   → misma categoría económica, distintos hechos
+   → ambos son internacionales pero eventos 100% distintos con actores distintos
+❌ "Milei habla del acuerdo con el FMI" + "El Banco Central sube las tasas"
+   → misma categoría económica, distintos hechos, distintos protagonistas
+❌ "Privatización de rutas nacionales" + "Juicio por los Cuadernos de la corrupción"
+   → ambos son política/economía pero eventos totalmente distintos de distintas épocas
+❌ "Elecciones universitarias en la UBA" + "Elecciones universitarias en la UNLP"
+   → misma temática pero instituciones y eventos distintos
 
 EJEMPLO CORRECTO:
 ✓ "Milei firma el DNU sobre desregulación" + "El Gobierno publicó el polémico DNU desregulador"
-  → mismo decreto, mismos protagonistas ✓
+  → mismo decreto específico, mismos protagonistas, mismo día ✓
 
 IMPORTANTE: Preferí NO agrupar antes que agrupar mal. Un cluster incorrecto destruye la credibilidad del producto.
 
@@ -340,7 +427,7 @@ async function _runClusterBatch(
       body: JSON.stringify({
         model:       process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
         messages:    [{ role: 'user', content: prompt }],
-        temperature: 0.0, // deterministic — we want strict factual matching, not creativity
+        temperature: 0.0,
         max_tokens:  1500,
       }),
     })
@@ -372,9 +459,15 @@ async function _runClusterBatch(
       const freshArts = arts.filter(a => !usedIds.has(a.id))
       if (freshArts.length < 2 || new Set(freshArts.map(a => a.sourceSlug)).size < 2) continue
 
-      // ── Coherence guard ──────────────────────────────────────────────────
-      // Reject clusters where all article pairs have near-zero vocabulary
-      // overlap — these are hallucinated connections by the model.
+      // ── Entity overlap guard ─────────────────────────────────────────
+      if (!entityCheckPasses(freshArts)) {
+        console.warn(
+          `[clustering-ai] Entity guard rejected: [${freshArts.map(a => a.sourceSlug).join(', ')}] "${freshArts.map(a => a.title.slice(0, 40)).join('" / "')}"`
+        )
+        continue
+      }
+
+      // ── Coherence guard ──────────────────────────────────────────────
       if (!clusterIsCoherent(freshArts.map(a => a.id), allArticlesForCoherence)) {
         console.warn(
           `[clustering-ai] Coherence guard rejected: [${freshArts.map(a => a.sourceSlug).join(', ')}] "${freshArts.map(a => a.title.slice(0, 40)).join('" / "')}"`
@@ -402,25 +495,17 @@ async function _runClusterBatch(
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-/**
- * Multi-stage semantic clustering.
- *
- * False negatives (missed clusters) are MUCH better than false positives
- * (wrong merges). Every stage is tuned conservatively.
- */
 export async function clusterArticlesWithAI(
   articles: ArticleInput[]
 ): Promise<ClusterResult[]> {
   if (articles.length < 2) return []
 
-  // Stage 1: classify every article by topic
   type Tagged = ArticleInput & { topic: string }
   const tagged: Tagged[] = articles.map(a => ({
     ...a,
     topic: classifyTopic(`${a.title} ${a.summary}`),
   }))
 
-  // Group by topic — cross-topic articles never compete
   const byTopic = new Map<string, Tagged[]>()
   for (const a of tagged) {
     if (!byTopic.has(a.topic)) byTopic.set(a.topic, [])
@@ -439,17 +524,17 @@ export async function clusterArticlesWithAI(
   for (const [topic, topicArts] of byTopic) {
     if (topicArts.length < 2) continue
 
-    // Stage 2: TF-IDF within topic (threshold 0.15 — 3× higher than before)
-    const tfidfClusters = clusterArticles(topicArts, 0.15)
+    // Stage 2: TF-IDF within topic (threshold 0.22, entity guard included)
+    const tfidfClusters = clusterArticles(topicArts, 0.22)
     for (const c of tfidfClusters) {
-      const freshIds = c.articleIds.filter(id => !usedIds.has(id))
+      const freshIds   = c.articleIds.filter(id => !usedIds.has(id))
       const freshSlugs = freshIds.map(id => topicArts.find(a => a.id === id)!.sourceSlug)
       if (freshIds.length < 2 || new Set(freshSlugs).size < 2) continue
       for (const id of freshIds) usedIds.add(id)
       allClusters.push({ ...c, articleIds: freshIds, sourceSlugs: freshSlugs })
     }
 
-    // Stage 3: AI for articles that TF-IDF didn't cluster (within same topic)
+    // Stage 3: AI for articles not yet clustered (within same topic)
     const unclustered = topicArts.filter(a => !usedIds.has(a.id))
     if (unclustered.length < 2) continue
 
@@ -463,4 +548,44 @@ export async function clusterArticlesWithAI(
 
   console.log(`[clustering] Done — ${allClusters.length} clusters from ${articles.length} articles`)
   return allClusters
+}
+
+// ── Cleanup helpers (used by runCleanup in pipeline.ts) ──────────────────────
+
+/**
+ * Scores an existing cluster for quality.  Returns a score in [0, 1]:
+ *  0.0 = very likely a bad cluster (should be deleted)
+ *  1.0 = high quality
+ *
+ * Checks:
+ *  1. Average pairwise TF-IDF cosine on titles only (no summary — titles are
+ *     what users see and what makes comparisons valuable)
+ *  2. Named entity overlap across the cluster
+ */
+export function scoreClusterQuality(articles: ArticleInput[]): number {
+  if (articles.length < 2) return 0
+
+  // Title-only cosine (no summary weighting — cleanup is about headline quality)
+  const titleDocs = articles.map(a => tokenize(a.title))
+  const vectors   = computeTFIDF(titleDocs)
+
+  let total = 0
+  let pairs = 0
+  for (let i = 0; i < articles.length; i++)
+    for (let j = i + 1; j < articles.length; j++) {
+      total += cosineSimilarity(vectors[i], vectors[j])
+      pairs++
+    }
+
+  const avgTitleCosine = pairs > 0 ? total / pairs : 0
+
+  // Entity overlap bonus
+  const hasEntityOverlap = entityCheckPasses(articles)
+
+  // Score combines both signals:
+  // - avg title cosine < 0.03 AND no entity overlap → very likely bad
+  // - either check passing gives a boost
+  let score = avgTitleCosine * 2  // normalise roughly to [0,1]
+  if (hasEntityOverlap) score += 0.1
+  return Math.min(1, score)
 }

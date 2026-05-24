@@ -42,8 +42,20 @@ async function handle(request: NextRequest) {
 
   try {
     // ── Phase 1: Ingest (synchronous, fast) ──────────────────────────────────
-    const { newArticles, sourceCount } = await runIngest()
+    const { newArticles, sourceCount, skipped } = await runIngest()
     const ingestMs = Date.now() - t0
+
+    // If ingest was skipped (recent scrape detected), don't cascade to cluster.
+    // Return early so we don't kick off unnecessary work.
+    if (skipped) {
+      console.log(`[cron] Skipped — recent scrape detected, no further phases triggered`)
+      return NextResponse.json({
+        ok:      true,
+        skipped: true,
+        ingestMs,
+        message: 'Ingest skipped — scraped too recently, no downstream phases triggered',
+      })
+    }
 
     // ── Phase 2: Cluster (fire-and-forget) ───────────────────────────────────
     // This creates a SEPARATE Vercel function invocation — the current request
@@ -60,6 +72,7 @@ async function handle(request: NextRequest) {
 
     return NextResponse.json({
       ok:          true,
+      skipped:     false,
       newArticles,
       sourceCount,
       ingestMs,
