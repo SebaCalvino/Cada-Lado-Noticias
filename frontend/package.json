@@ -7,8 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:push": "drizzle-kit push:pg",
+    "db:generate": "drizzle-kit generate:pg",
+    "db:studio": "drizzle-kit studio",
+    "db:migrate": "node -e \"require('dotenv').config({path: '../.env.local'}); const { migrate } = require('drizzle-orm/postgres-js/migrator'); const postgres = require('postgres'); const db = require('drizzle-orm/postgres-js').drizzle(postgres(process.env.DATABASE_URL)); migrate(db, {migrationsFolder: '../migrations'}).then(() => process.exit(0)).catch(e => {console.error(e); process.exit(1)});\"",
+    "vercel-build": "npm run db:push && npm run build"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.1.2",

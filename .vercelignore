@@ -1,0 +1,12 @@
+.git
+.gitignore
+README.md
+*.md
+.claude/
+.vscode/
+.env.local
+.env.example
+node_modules/
+.next/
+dist/
+build/
