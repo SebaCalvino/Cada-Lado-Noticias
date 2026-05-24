@@ -1,0 +1,13 @@
+diff --git a/lib/pipeline.ts b/lib/pipeline.ts
+index f1ece66..bcd691e 100644
+--- a/lib/pipeline.ts
++++ b/lib/pipeline.ts
+@@ -131,6 +131,8 @@ export async function runPipeline() {
+         url: '',
+       }))
+ 
++    // Rate limit: Groq free tier ~6k TPM, each synthesis ~3k tokens → wait 30s between calls
++    await new Promise((r) => setTimeout(r, 30_000))
+     const synthesis = await synthesizeCluster(artsForSynthesis)
+     if (!synthesis) continue
+ 
