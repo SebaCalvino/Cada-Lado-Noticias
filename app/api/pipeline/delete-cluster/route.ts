@@ -9,10 +9,11 @@
  *   curl -X POST /api/pipeline/delete-cluster \
  *     -H "Authorization: Bearer $CRON_SECRET" \
  *     -H "Content-Type: application/json" \
- *     -d '{"id": 4}'
+ *     -d "{\"id\": 4}"
  *
  * Use this when a specific bad cluster survives the automatic cleanup
- * (e.g. because the automated score is marginal but the merge is clearly wrong).
+ * (e.g. the articles share common Argentine political vocabulary so their
+ * TF-IDF cosine is above the automated threshold, but the merge is wrong).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
   let id: number
   try {
     const body = await request.json()
-    id = parseInt(body.id, 10)
+    id = parseInt(String(body.id), 10)
     if (!Number.isFinite(id) || id <= 0) throw new Error('invalid id')
   } catch {
     return NextResponse.json(
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Verify the cluster exists before deleting
+  // Confirm the cluster exists before touching anything
   const [cluster] = await db
     .select({ id: newsClusters.id, title: newsClusters.title })
     .from(newsClusters)
@@ -58,26 +59,17 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Delete links first (FK constraint), then the cluster
-  const { rowCount: linksDeleted } = await db
-    .delete(clusterArticles)
-    .where(eq(clusterArticles.clusterId, id))
+  // Delete article links first (FK constraint), then the cluster row
+  await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, id))
+  await db.delete(newsClusters).where(eq(newsClusters.id, id))
 
-  await db
-    .delete(newsClusters)
-    .where(eq(newsClusters.id, id))
-
-  console.log(
-    `[delete-cluster] ✗ Deleted cluster ${id} ` +
-    `(${linksDeleted ?? 0} article links removed) "${cluster.title?.slice(0, 60)}"`
-  )
+  console.log(`[delete-cluster] ✗ Deleted cluster ${id} "${(cluster.title ?? '').slice(0, 60)}"`)
 
   return NextResponse.json({
-    ok:           true,
+    ok:      true,
     id,
-    title:        cluster.title,
-    linksDeleted: linksDeleted ?? 0,
-    message:      `Cluster ${id} deleted. Articles re-enter the eligible pool on next cluster run.`,
+    title:   cluster.title,
+    message: `Cluster ${id} deleted. Articles re-enter the eligible pool on next cluster run.`,
   })
 }
 
