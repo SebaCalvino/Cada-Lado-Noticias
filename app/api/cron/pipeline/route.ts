@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runPipeline } from '@/lib/pipeline'
 
 export const runtime = 'nodejs'
-export const maxDuration = 300
+// Pro plan + Fluid Compute (default desde abril 2025) permite hasta 800s.
+// 600s da margen holgado para los reintentos de Groq por rate-limit.
+export const maxDuration = 600
 
 function checkAuth(request: NextRequest): boolean {
   if (!process.env.CRON_SECRET) return true
