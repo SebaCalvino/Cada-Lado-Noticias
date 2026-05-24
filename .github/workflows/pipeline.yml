@@ -1,15 +1,16 @@
-name: Pipeline — backup diario
-
-# Con Vercel Pro el cron oficial (vercel.json) corre cada hora.
-# Este workflow es sólo un safety-net: si Vercel falla durante un día
-# entero, GitHub Actions dispara el pipeline una vez a las 03:30 UTC.
+name: Pipeline automático
 
 on:
+  # ── Dispara tras cada push a main (= cada deploy a Vercel) ──────────────
+  push:
+    branches: [main]
+
+  # ── Backup diario por si el cron de Vercel falla ────────────────────────
   schedule:
-    # Cada día a las 03:30 UTC — staggered respecto a la hora en punto de Vercel
-    - cron: '30 3 * * *'
+    - cron: '30 3 * * *'   # 03:30 UTC, staggered respecto a la hora en punto
+
+  # ── Manual desde GitHub si se necesita ──────────────────────────────────
   workflow_dispatch:
-    # También disparable manualmente desde GitHub Actions
 
 jobs:
   run-pipeline:
@@ -17,9 +18,16 @@ jobs:
     timeout-minutes: 12
 
     steps:
-      - name: Trigger scraping pipeline (backup)
+      # En push: esperar a que Vercel termine de deployar antes de llamar
+      - name: Wait for Vercel deployment
+        if: github.event_name == 'push'
         run: |
-          echo "Backup pipeline — $(date -u '+%Y-%m-%d %H:%M UTC')"
+          echo "Esperando que Vercel termine el deploy (~3 min)..."
+          sleep 180
+
+      - name: Trigger scraping pipeline
+        run: |
+          echo "Disparando pipeline — $(date -u '+%Y-%m-%d %H:%M UTC') [trigger: ${{ github.event_name }}]"
 
           HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -X POST \
