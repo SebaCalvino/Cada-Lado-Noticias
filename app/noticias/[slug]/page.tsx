@@ -4,9 +4,10 @@ import Link          from 'next/link'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { getNewsDetailServer, getNewsClustersServer } from '@/lib/queries'
 import { timeAgo, noticiaHref } from '@/lib/utils'
-import HeadlineComparison from '@/components/HeadlineComparison'
-import CoverageBar        from '@/components/CoverageBar'
-import CommentsSection    from '@/components/CommentsSection'
+import HeadlineComparison  from '@/components/HeadlineComparison'
+import EvolutionTimeline   from '@/components/EvolutionTimeline'
+import CoverageBar         from '@/components/CoverageBar'
+import CommentsSection     from '@/components/CommentsSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -204,7 +205,12 @@ export default async function NoticiaDetailPage({ params }: Props) {
               <HeadlineComparison articles={uniqueArticles} />
             )}
 
-            {/* 2. "En lo que coinciden" — what all outlets agree on */}
+            {/* 2. Evolution timeline — how framing shifted over time */}
+            {uniqueArticles.length >= 3 && (
+              <EvolutionTimeline articles={uniqueArticles} />
+            )}
+
+            {/* 3. "En lo que coinciden" — what all outlets agree on */}
             {cluster.key_facts && cluster.key_facts.length > 0 && (
               <section style={{ marginBottom: 36 }}>
                 <div
@@ -288,7 +294,7 @@ export default async function NoticiaDetailPage({ params }: Props) {
               </section>
             )}
 
-            {/* 3. "La historia" — synthesis prose, no AI badge */}
+            {/* 4. "La historia" — synthesis prose, no AI badge */}
             {paragraphs.length > 0 && (
               <section style={{ marginBottom: 40 }}>
                 <div
@@ -334,7 +340,7 @@ export default async function NoticiaDetailPage({ params }: Props) {
               </section>
             )}
 
-            {/* 4. Per-source coverage */}
+            {/* 5. Per-source coverage */}
             {uniqueArticles.length > 0 && uniqueArticles.some(a => a.emphasis || a.omissions) && (
               <section style={{ marginBottom: 40 }}>
                 <div

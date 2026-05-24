@@ -5,7 +5,7 @@
  */
 
 import { db, newsClusters, clusterArticles, rawArticles, sources, clusterComments } from './db'
-import { eq, desc, sql, isNotNull, ne, and } from 'drizzle-orm'
+import { eq, desc, sql, isNotNull, ne, and, or, ilike } from 'drizzle-orm'
 
 export async function getNewsClustersServer(
   page = 1,
@@ -134,6 +134,7 @@ export async function getNewsDetailServer(id: number) {
         source_color:         source.color,
         article_title:        article.title,
         article_url:          article.url,
+        published_at:         article.publishedAt?.toISOString() ?? null,
         coverage_percentage:  ca.coveragePercentage,
         emphasis:             ca.emphasis   ?? null,
         omissions:            ca.omissions  ?? null,
@@ -193,6 +194,79 @@ export async function getCategoriesServer() {
       .groupBy(newsClusters.category)
       .orderBy(desc(sql`count(*)`))
       .then(rows => rows.filter(r => r.category) as { category: string; count: number }[])
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Full-text search over cluster titles and synthesis.
+ *
+ * Uses Postgres ILIKE (case-insensitive substring match) on both the cluster
+ * title and the synthesis column.  Only published clusters (synthesis IS NOT
+ * NULL) are returned, ordered newest-first.
+ *
+ * Returns the same shape as getNewsClustersServer so NewsCard can render the
+ * results without adaptation.
+ */
+export async function searchClustersServer(query: string, limit = 15) {
+  const trimmed = query.trim()
+  if (!trimmed) return []
+
+  const q = `%${trimmed}%`
+
+  try {
+    const rows = await db
+      .select({ cluster: newsClusters, source: sources })
+      .from(newsClusters)
+      .leftJoin(clusterArticles, eq(clusterArticles.clusterId, newsClusters.id))
+      .leftJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
+      .leftJoin(sources, eq(sources.id, rawArticles.sourceId))
+      .where(
+        and(
+          isNotNull(newsClusters.synthesis),
+          ne(newsClusters.synthesis, ''),
+          or(
+            ilike(newsClusters.title, q),
+            ilike(newsClusters.synthesis, q)
+          )
+        )
+      )
+      .orderBy(desc(newsClusters.publishedAt))
+
+    // Deduplicate — the join fans out one row per source
+    const clusterMap = new Map<
+      number,
+      { cluster: (typeof rows)[0]['cluster']; sourceSlugs: Set<string> }
+    >()
+
+    for (const row of rows) {
+      if (!clusterMap.has(row.cluster.id)) {
+        clusterMap.set(row.cluster.id, {
+          cluster:    row.cluster,
+          sourceSlugs: new Set(),
+        })
+      }
+      if (row.source?.slug) {
+        clusterMap.get(row.cluster.id)!.sourceSlugs.add(row.source.slug)
+      }
+    }
+
+    const entries = Array.from(clusterMap.values()).slice(0, limit)
+
+    return entries.map(({ cluster, sourceSlugs }) => ({
+      id:          cluster.id,
+      title:       cluster.title,
+      synthesis:
+        cluster.synthesis && cluster.synthesis.length > 200
+          ? cluster.synthesis.slice(0, 200) + '…'
+          : cluster.synthesis,
+      category:    cluster.category,
+      source_count: cluster.sourceCount,
+      published_at: cluster.publishedAt?.toISOString() ?? null,
+      sources:     Array.from(sourceSlugs),
+      image_url:   cluster.imageUrl ?? null,
+    }))
   } catch {
     return []
   }
