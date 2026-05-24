@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
-import { getNews, getStats } from '@/lib/api'
+import { getNewsClustersServer, getStatsServer } from '@/lib/queries'
 import HeroAnimated from '@/components/HeroAnimated'
 import StatsCounter from '@/components/StatsCounter'
 import BiasSection from '@/components/BiasSection'
@@ -10,13 +10,10 @@ import AnimatedNewsGrid from '@/components/AnimatedNewsGrid'
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
-  const [news, stats] = await Promise.allSettled([
-    getNews(1),
-    getStats(),
+  const [clusters, statsData] = await Promise.all([
+    getNewsClustersServer(1, 6),
+    getStatsServer(),
   ])
-
-  const clusters = news.status === 'fulfilled' ? news.value.slice(0, 6) : []
-  const statsData = stats.status === 'fulfilled' ? stats.value : null
 
   const featuredCluster = clusters[0] ?? null
   const restClusters = clusters.slice(1)

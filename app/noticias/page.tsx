@@ -1,4 +1,4 @@
-import { getNews, getCategories } from '@/lib/api'
+import { getNewsClustersServer, getCategoriesServer } from '@/lib/queries'
 import NewsCard from '@/components/NewsCard'
 import Link from 'next/link'
 
@@ -33,13 +33,10 @@ export default async function NoticiasPage({ searchParams }: Props) {
   const category = searchParams.category
   const page = parseInt(searchParams.page || '1', 10)
 
-  const [newsResult, catsResult] = await Promise.allSettled([
-    getNews(page, category),
-    getCategories(),
+  const [clusters, categories] = await Promise.all([
+    getNewsClustersServer(page, 20, category),
+    getCategoriesServer(),
   ])
-
-  const clusters = newsResult.status === 'fulfilled' ? newsResult.value : []
-  const categories = catsResult.status === 'fulfilled' ? catsResult.value : []
   const today = formatDate(new Date())
 
   return (
