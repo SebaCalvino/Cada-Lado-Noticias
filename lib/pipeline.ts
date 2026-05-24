@@ -46,7 +46,7 @@ const MIN_ARTICLES_FOR_CLUSTERING = 5
  * return early without hitting the RSS feeds.  Prevents duplicate work when
  * Vercel or GitHub Actions retries the cron within the same window.
  */
-const SKIP_IF_SCRAPED_WITHIN_MS = 15 * 60 * 1_000   // 15 minutes
+const SKIP_IF_SCRAPED_WITHIN_MS = 12 * 60 * 1_000   // 12 minutes — allows fresh ingest every 15-min cycle
 
 /**
  * Clusters whose scoreClusterQuality() falls below this value are deleted

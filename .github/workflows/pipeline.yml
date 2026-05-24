@@ -1,61 +1,40 @@
-name: Pipeline automático
+name: Pipeline backup
+
+# Fires at :07, :22, :37, :52 every hour — offset from Vercel's :00, :15, :30, :45.
+# If Vercel cron is delayed or fails, this catches up within 7-8 minutes.
+# On public repos GitHub Actions Linux minutes are free and unlimited.
 
 on:
-  # ── Dispara tras cada push a main (= cada deploy a Vercel) ──────────────
-  push:
-    branches: [main]
-
-  # ── Backup diario por si el cron de Vercel falla ────────────────────────
   schedule:
-    - cron: '30 3 * * *'   # 03:30 UTC, staggered respecto a la hora en punto
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:   # manual trigger from GitHub UI
 
-  # ── Manual desde GitHub si se necesita ──────────────────────────────────
-  workflow_dispatch:
+env:
+  SITE_URL: https://cada-lado-noticias.vercel.app
 
 jobs:
-  run-pipeline:
+  pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 8
 
     steps:
-      # En push: esperar a que Vercel termine de deployar antes de llamar
-      - name: Wait for Vercel deployment
-        if: github.event_name == 'push'
+      - name: Ingest (triggers cluster via waitUntil)
         run: |
-          echo "Esperando que Vercel termine el deploy (~3 min)..."
-          sleep 180
-
-      - name: Trigger scraping pipeline
-        env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          echo "Disparando pipeline — $(date -u '+%Y-%m-%d %H:%M UTC') [trigger: ${{ github.event_name }}]"
-
-          # Validar que APP_URL esté configurado
-          if [ -z "$APP_URL" ]; then
-            echo "ERROR: El secret APP_URL no está configurado en este repositorio."
-            echo "Ve a Settings → Secrets and variables → Actions → New repository secret"
-            echo "  Name: APP_URL"
-            echo "  Value: https://tu-proyecto.vercel.app"
-            exit 1
-          fi
-
-          echo "Target URL: ${APP_URL}/api/cron/pipeline"
-
-          HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
-            -X POST \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
+          echo "$(date -u '+%H:%M UTC') — triggering ingest..."
+          curl -sf -X POST "$SITE_URL/api/cron/pipeline" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            --max-time 600 \
-            "${APP_URL}/api/cron/pipeline")
+            -w "\nHTTP %{http_code}\n" || echo "Non-fatal: ingest call failed"
 
-          echo "HTTP status: $HTTP_STATUS"
-          cat /tmp/response.json
+      - name: Wait for cluster phase (~2.5 min)
+        run: sleep 150
 
-          if [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "Pipeline falló con status $HTTP_STATUS"
-            exit 1
-          fi
-
-          echo "Pipeline completado"
+      - name: Synthesize safety net
+        # Catches any clusters with synthesis=null that the waitUntil chain missed
+        # (Vercel killed the function early, cold start delay, race condition, etc.)
+        run: |
+          echo "$(date -u '+%H:%M UTC') — synthesize safety net..."
+          curl -sf -X POST "$SITE_URL/api/pipeline/synthesize" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -w "\nHTTP %{http_code}\n" || echo "Non-fatal: synthesize call failed"
