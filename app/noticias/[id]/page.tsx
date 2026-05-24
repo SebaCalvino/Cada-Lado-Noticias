@@ -2,7 +2,7 @@ import { Fragment } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Clock, Layers, BookOpen } from 'lucide-react'
-import { getNewsDetail, getNews } from '@/lib/api'
+import { getNewsDetailServer, getNewsClustersServer } from '@/lib/queries'
 import { timeAgo } from '@/lib/utils'
 import CoverageBar from '@/components/CoverageBar'
 import CommentsSection from '@/components/CommentsSection'
@@ -65,20 +65,12 @@ export default async function NoticiaDetailPage({ params }: Props) {
   const id = parseInt(params.id, 10)
   if (isNaN(id)) notFound()
 
-  let cluster
-  try {
-    cluster = await getNewsDetail(id)
-  } catch {
-    notFound()
-  }
+  const cluster = await getNewsDetailServer(id)
+  if (!cluster) notFound()
 
-  let relatedClusters: Awaited<ReturnType<typeof getNews>> = []
-  try {
-    const allNews = await getNews(1)
-    relatedClusters = allNews.filter(c => c.id !== cluster.id).slice(0, 3)
-  } catch {
-    // ignore
-  }
+  const relatedClusters = await getNewsClustersServer(1, 6)
+    .then(list => list.filter(c => c.id !== cluster.id).slice(0, 3))
+    .catch(() => [])
 
   const accentColor = CATEGORY_ACCENT[cluster.category ?? ''] ?? '#374151'
   const badgeColor  = CATEGORY_BADGE[cluster.category ?? '']  ?? 'bg-gray-500'

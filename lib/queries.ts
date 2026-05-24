@@ -4,7 +4,7 @@
  * which avoids the relative-URL issue that breaks axios in Node.js.
  */
 
-import { db, newsClusters, clusterArticles, rawArticles, sources } from './db'
+import { db, newsClusters, clusterArticles, rawArticles, sources, clusterComments } from './db'
 import { eq, desc, sql, isNotNull } from 'drizzle-orm'
 
 export async function getNewsClustersServer(
@@ -84,6 +84,58 @@ export async function getStatsServer() {
     }
   } catch {
     return null
+  }
+}
+
+/** Detalle completo de un cluster: artículos por fuente + comentarios */
+export async function getNewsDetailServer(id: number) {
+  const [cluster] = await db
+    .select()
+    .from(newsClusters)
+    .where(eq(newsClusters.id, id))
+
+  if (!cluster) return null
+
+  const articleRows = await db
+    .select({ ca: clusterArticles, article: rawArticles, source: sources })
+    .from(clusterArticles)
+    .innerJoin(rawArticles, eq(rawArticles.id, clusterArticles.articleId))
+    .innerJoin(sources,     eq(sources.id,     rawArticles.sourceId))
+    .where(eq(clusterArticles.clusterId, id))
+
+  const comments = await db
+    .select()
+    .from(clusterComments)
+    .where(eq(clusterComments.clusterId, id))
+
+  return {
+    id:           cluster.id,
+    title:        cluster.title,
+    synthesis:    cluster.synthesis    ?? null,
+    key_facts:    cluster.keyFacts     ?? null,
+    category:     cluster.category     ?? null,
+    source_count: cluster.sourceCount,
+    published_at: cluster.publishedAt?.toISOString() ?? null,
+    image_url:    cluster.imageUrl     ?? null,
+    articles: articleRows.map(({ ca, article, source }) => ({
+      source_slug:          source.slug,
+      source_name:          source.name,
+      source_color:         source.color,
+      article_title:        article.title,
+      article_url:          article.url,
+      coverage_percentage:  ca.coveragePercentage,
+      emphasis:             ca.emphasis   ?? null,
+      omissions:            ca.omissions  ?? null,
+      similarity_score:     ca.similarityScore,
+    })),
+    comments: comments.map(c => ({
+      id:         c.id,
+      author:     c.author    ?? null,
+      text:       c.text,
+      sentiment:  c.sentiment ?? null,
+      votes:      c.votes,
+      source_slug: c.sourceSlug,
+    })),
   }
 }
 
