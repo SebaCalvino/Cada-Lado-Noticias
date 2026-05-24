@@ -1,18 +1,8 @@
 {
-  "buildCommand": "cd frontend && npm run vercel-build",
-  "installCommand": "cd frontend && npm ci",
-  "outputDirectory": "frontend/.next",
-  "framework": "nextjs",
   "crons": [
     {
-      "path": "/api/cron/scrape",
+      "path": "/api/cron/pipeline",
       "schedule": "0 0 * * *"
     }
-  ],
-  "env": {
-    "DATABASE_URL": "@database_url",
-    "CRON_SECRET": "@cron_secret",
-    "GROQ_API_KEY": "@groq_api_key",
-    "ANTHROPIC_API_KEY": "@anthropic_api_key"
-  }
+  ]
 }
