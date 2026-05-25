@@ -58,12 +58,15 @@ async function callGroq(userPrompt: string, attempt = 0): Promise<string> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+      // llama-3.3-70b-versatile handles large structured JSON far better than 8b.
+      // Override with GROQ_SYNTH_MODEL if needed.
+      model:      process.env.GROQ_SYNTH_MODEL || 'llama-3.3-70b-versatile',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.3,
+      max_tokens:  4000,  // synthesis JSON can be 1500-2500 tokens; be safe
     }),
   })
 
@@ -97,11 +100,20 @@ function formatArticles(articles: ArticleForSynthesis[]): string {
 function parseResponse(raw: string, articles: ArticleForSynthesis[]): SynthesisResult | null {
   try {
     let cleaned = raw.trim()
-    if (cleaned.startsWith('```')) {
-      const parts = cleaned.split('```')
-      cleaned = parts[1] || cleaned
-      if (cleaned.startsWith('json')) cleaned = cleaned.slice(4)
+
+    // Strip ```json ... ``` fences
+    if (cleaned.includes('```')) {
+      const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/)
+      if (fenced) cleaned = fenced[1].trim()
     }
+
+    // If there's prose before the JSON, find the first '{' and last '}'
+    const firstBrace = cleaned.indexOf('{')
+    const lastBrace  = cleaned.lastIndexOf('}')
+    if (firstBrace !== 0 && firstBrace > -1) {
+      cleaned = cleaned.slice(firstBrace, lastBrace + 1)
+    }
+
     cleaned = cleaned.trim()
 
     const data = JSON.parse(cleaned)
@@ -138,9 +150,14 @@ export async function synthesizeCluster(
   try {
     const prompt = USER_PROMPT_TEMPLATE.replace('{articles}', formatArticles(articles))
     const raw = await callGroq(prompt)
-    return parseResponse(raw, articles)
+    const result = parseResponse(raw, articles)
+    if (!result) {
+      // Log the first 300 chars of the raw response so we can diagnose parse failures
+      console.error('[synthesis] parseResponse returned null. Raw response start:', raw.slice(0, 300))
+    }
+    return result
   } catch (err) {
-    console.error('AI synthesis error:', err)
+    console.error('[synthesis] callGroq threw:', err)
     return null
   }
 }
