@@ -288,12 +288,13 @@ function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): numbe
 
 /**
  * TF-IDF clustering with union-find.
- * Threshold 0.12 — lower than a strict match but above noise.  The entity
- * overlap guard still runs on TF-IDF results to filter false positives.
+ * Threshold 0.18: high enough to filter single shared keyword false positives
+ * (e.g. two articles sharing only "discapacidad"), low enough for same-event
+ * pairs that use different vocabulary.  Entity guard runs after this.
  */
 export function clusterArticles(
   articles: ArticleInput[],
-  threshold = 0.12
+  threshold = 0.18
 ): ClusterResult[] {
   if (articles.length < 2) return []
 
@@ -393,19 +394,22 @@ export function clusterIsCoherent(
 
 // ── AI clustering (Groq) ──────────────────────────────────────────────────────
 
-// Prompt for AI clustering — kept short and direct so the model doesn't
-// over-refuse.  Strict "same specific event" requirement is embedded in the
-// task description, not in a list of scary prohibitions.
-const CLUSTER_PROMPT_HEADER = `Sos un editor de noticias argentino. Revisá los artículos y agrupalós si dos o más cubren EXACTAMENTE el mismo hecho específico (mismo evento, mismos protagonistas principales, misma fecha aproximada).
+// Prompt for AI clustering.
+// Balance: strict enough to avoid false positives (same theme ≠ same event),
+// but not so scary that the model refuses everything.
+// The two hard requirements are: (1) same specific event, (2) same protagonist.
+const CLUSTER_PROMPT_HEADER = `Sos un editor de noticias argentino. Identificá grupos de artículos que cubren EXACTAMENTE el mismo suceso específico.
 
-Condiciones para agrupar:
-- Mismo suceso concreto (no solo el mismo tema general)
-- Comparten al menos un nombre propio, sigla, cifra o lugar en común
-- Publicados con un par de días de diferencia como máximo
+Para agrupar se deben cumplir LOS DOS requisitos:
+1. Mismo evento concreto — no solo el mismo tema (ej: "discapacidad", "política")
+2. Mismo protagonista principal — mismo nombre propio, institución o lugar específico
 
-Respondé SOLO con JSON válido, sin texto adicional:
+NO agrupar si solo comparten una palabra temática genérica o categoría.
+Ejemplo de error: un artículo sobre ajuste a personas con discapacidad + uno sobre un loro con discapacidad → tema similar, protagonistas totalmente distintos → NO agrupar.
+
+Respondé SOLO con JSON:
 {"groups": [[1,3],[2,5,7]]}
-Sin grupos: {"groups": []}
+Sin grupos claros: {"groups": []}
 
 Artículos:
 `
@@ -527,7 +531,7 @@ export async function clusterArticlesWithAI(
     if (topicArts.length < 2) continue
 
     // Stage 2: TF-IDF within topic — entity guard still applied on results
-    const tfidfClusters = clusterArticles(topicArts, 0.12)
+    const tfidfClusters = clusterArticles(topicArts, 0.18)
     for (const c of tfidfClusters) {
       const freshIds   = c.articleIds.filter(id => !usedIds.has(id))
       const freshSlugs = freshIds.map(id => topicArts.find(a => a.id === id)!.sourceSlug)
