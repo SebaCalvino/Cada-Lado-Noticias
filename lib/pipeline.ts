@@ -182,7 +182,12 @@ async function fetchClusterableArticles(cutoff: Date) {
       sourceId: rawArticles.sourceId,
     })
     .from(rawArticles)
-    .where(gte(rawArticles.scrapedAt, cutoff))
+    .where(
+      and(
+        gte(rawArticles.scrapedAt, cutoff),
+        eq(rawArticles.clustered, false)   // skip confirmed singletons from prior runs
+      )
+    )
     .orderBy(desc(rawArticles.publishedAt))   // newest first → prioritises breaking news
 
   const toProcess = allRecent.filter(a => !inClusterIds.has(a.id))

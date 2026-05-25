@@ -48,7 +48,7 @@ async function handle(request: NextRequest) {
     const clusterAndSynthPromise = (async () => {
       try {
         const t1 = Date.now()
-        const { clustersCreated, singletons } = await runCluster(80)
+        const { clustersCreated, singletons } = await runCluster(300)
         console.log(
           `[cron] cluster done in ${Date.now() - t1} ms — ` +
           `${clustersCreated} clusters, ${singletons} singletons`

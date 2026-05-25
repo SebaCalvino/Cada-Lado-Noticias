@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   const t0 = Date.now()
 
   try {
-    const { clustersCreated, singletons } = await runCluster(80)
+    const { clustersCreated, singletons } = await runCluster(300)
     const clusterMs = Date.now() - t0
 
     // Trigger synthesize in background
