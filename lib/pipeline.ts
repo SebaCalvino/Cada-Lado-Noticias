@@ -30,7 +30,7 @@ import {
   scoreClusterQuality,
   type ArticleInput,
 } from './clustering'
-import { synthesizeCluster, type ArticleForSynthesis } from './ai'
+import { synthesizeCluster, GroqRateLimitError, type ArticleForSynthesis } from './ai'
 
 // ─── Generic-title filter ─────────────────────────────────────────────────────
 
@@ -86,8 +86,14 @@ function isTitleGeneric(title: string): boolean {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Minimum pause between consecutive Groq synthesis calls (30 RPM limit). */
+/** Minimum pause between consecutive Groq AI-clustering calls (30 RPM limit). */
 const GROQ_CALL_DELAY_MS = 2_200
+
+/**
+ * Pause between consecutive Groq synthesis calls.
+ * Only used when MAX_CLUSTERS > 1. With 1 cluster/invocation this never fires.
+ */
+const GROQ_SYNTH_DELAY_MS = 20_000
 
 /** Expand the article window to 96 h if fewer than this many are available. */
 const MIN_ARTICLES_FOR_CLUSTERING = 5
@@ -182,12 +188,7 @@ async function fetchClusterableArticles(cutoff: Date) {
       sourceId: rawArticles.sourceId,
     })
     .from(rawArticles)
-    .where(
-      and(
-        gte(rawArticles.scrapedAt, cutoff),
-        eq(rawArticles.clustered, false)   // skip confirmed singletons from prior runs
-      )
-    )
+    .where(and(gte(rawArticles.scrapedAt, cutoff), eq(rawArticles.clustered, false)))
     .orderBy(desc(rawArticles.publishedAt))   // newest first → prioritises breaking news
 
   const toProcess = allRecent.filter(a => !inClusterIds.has(a.id))
@@ -572,16 +573,26 @@ export async function runSynthesize(
       url:        r.article.url,
     }))
 
-    // Throttle: pause before all calls except the first
-    if (i > 0) await sleep(GROQ_CALL_DELAY_MS)
+    // Throttle: pause before all calls except the first.
+    // Use longer delay for synthesis (heavy token output) vs clustering.
+    if (i > 0) await sleep(GROQ_SYNTH_DELAY_MS)
 
-    const synthesis = await synthesizeCluster(artsForSynthesis)
+    let synthesis
+    try {
+      synthesis = await synthesizeCluster(artsForSynthesis)
+    } catch (err) {
+      if (err instanceof GroqRateLimitError) {
+        console.warn(`[synthesize] Rate limited on cluster ${cluster.id} — leaving for next run`)
+        failed++
+        continue  // don't delete — will be retried on next invocation
+      }
+      throw err
+    }
 
     if (!synthesis) {
       console.warn(
         `[synthesize] Synthesis failed for cluster ${cluster.id} — deleting for retry`
       )
-      // Delete cluster + its links so articles re-enter the eligible pool
       await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
       await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
       failed++

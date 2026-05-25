@@ -1,5 +1,9 @@
 const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions'
 
+export class GroqRateLimitError extends Error {
+  constructor() { super('Groq rate limit exhausted — retry later') }
+}
+
 const SYSTEM_PROMPT = `Sos un periodista neutral y experimentado argentino. Tu misión es analizar la misma noticia
 cubierta por distintos medios argentinos y producir un análisis objetivo e imparcial.
 Nunca tomás partido político. Tu objetivo es mostrar qué dice cada medio y qué omite,
@@ -9,17 +13,17 @@ const USER_PROMPT_TEMPLATE = `Analizá las siguientes notas periodísticas sobre
 
 {articles}
 
-Producí un análisis completo en formato JSON con esta estructura exacta:
+Producí un análisis en formato JSON con esta estructura exacta:
 {
   "title": "Título neutral y descriptivo del hecho (máx 100 caracteres)",
-  "synthesis": "Síntesis neutral del hecho redactada como artículo periodístico real, de 500-700 palabras. IMPORTANTE: separar OBLIGATORIAMENTE cada párrafo con un doble salto de línea (dos caracteres \\n seguidos). Estructura: (1) Lead de 2-3 oraciones que responda quién, qué, cuándo, dónde y por qué. \\n\\n (2) Párrafo de contexto y antecedentes. \\n\\n (3) Párrafo con declaraciones o reacciones relevantes. \\n\\n (4) Párrafo con consecuencias, estado actual o perspectiva. Mínimo 4 párrafos separados por \\n\\n. Solo hechos verificables, sin opinión. En castellano argentino.",
-  "key_facts": ["Hecho clave 1", "Hecho clave 2", "Hecho clave 3", "Hecho clave 4", "Hecho clave 5"],
+  "synthesis": "Síntesis neutral de 250-350 palabras. Párrafos separados por \\n\\n. Estructura: (1) Lead con quién, qué, cuándo, dónde. \\n\\n (2) Contexto y antecedentes. \\n\\n (3) Consecuencias o estado actual. Solo hechos verificables, sin opinión. En castellano argentino.",
+  "key_facts": ["Hecho clave 1", "Hecho clave 2", "Hecho clave 3"],
   "category": "Una de: Política, Economía, Sociedad, Seguridad, Internacional, Deportes, Cultura, Tecnología, Ambiente",
   "source_analyses": [
     {
       "source_slug": "slug del medio",
-      "emphasis": "Qué aspectos, ángulos o datos enfatiza este medio. Incluí el tono editorial, a quién le dan voz, qué términos usa y qué perspectiva política o ideológica refleja su cobertura. 3-4 oraciones con sustancia.",
-      "omissions": "Qué datos, voces o contexto relevante omite o minimiza este medio en comparación con los demás. Sé específico: qué fuentes no consultó, qué hechos no menciona, qué contexto histórico o económico ignoró. 3-4 oraciones. Si la cobertura es genuinamente completa, escribí 'Sin omisiones destacadas.'"
+      "emphasis": "Qué aspectos enfatiza este medio y qué perspectiva refleja. 2 oraciones.",
+      "omissions": "Qué datos o voces omite respecto a los demás. 2 oraciones. Si es completa: 'Sin omisiones destacadas.'"
     }
   ]
 }
@@ -68,27 +72,25 @@ async function callGroq(userPrompt: string, attempt = 0): Promise<string> {
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.3,
-      max_tokens:  4000,  // synthesis JSON can be 1500-2500 tokens; be safe
+      max_tokens:  2000,  // reduced prompt targets ~800-1200 tokens output
     }),
     signal: AbortSignal.timeout(25_000),  // 25 s cap: normal Groq call ~5-15 s
   })
 
-  if (res.status === 429 && attempt < 3) {
-    // Respect Groq's Retry-After header but cap it so we don't blow the
-    // Vercel function budget.  Without a cap, a 60 s Retry-After × 4 retries
-    // = 240 s of pure waiting, which reliably causes a 504.
-    // Budget math: 3 retries × (25 s fetch + 12 s wait) = 111 s per cluster.
-    // For 2 clusters that's 222 s — comfortably inside the 300 s limit.
-    const retryAfterHeader = res.headers.get('retry-after')
-    const wait = Math.min(
-      retryAfterHeader
-        ? Math.ceil(parseFloat(retryAfterHeader)) * 1000
-        : Math.pow(2, attempt) * 4_000,  // 4 s, 8 s, 16 s
-      12_000                              // hard cap: never wait more than 12 s
-    )
-    console.warn(`[groq] Rate limited — waiting ${wait / 1000}s (attempt ${attempt + 1}/3)`)
-    await new Promise((r) => setTimeout(r, wait))
-    return callGroq(userPrompt, attempt + 1)
+  if (res.status === 429) {
+    if (attempt < 2) {
+      const retryAfterHeader = res.headers.get('retry-after')
+      const wait = Math.min(
+        retryAfterHeader
+          ? Math.ceil(parseFloat(retryAfterHeader)) * 1000
+          : Math.pow(2, attempt) * 5_000,  // 5 s, 10 s
+        30_000
+      )
+      console.warn(`[groq] Rate limited — waiting ${wait / 1000}s (attempt ${attempt + 1}/2)`)
+      await new Promise((r) => setTimeout(r, wait))
+      return callGroq(userPrompt, attempt + 1)
+    }
+    throw new GroqRateLimitError()
   }
 
   if (!res.ok) throw new Error(`Groq API error: ${res.status} — ${await res.text().catch(() => '')}`)
@@ -161,11 +163,11 @@ export async function synthesizeCluster(
     const raw = await callGroq(prompt)
     const result = parseResponse(raw, articles)
     if (!result) {
-      // Log the first 300 chars of the raw response so we can diagnose parse failures
       console.error('[synthesis] parseResponse returned null. Raw response start:', raw.slice(0, 300))
     }
     return result
   } catch (err) {
+    if (err instanceof GroqRateLimitError) throw err  // let caller decide — don't delete cluster
     console.error('[synthesis] callGroq threw:', err)
     return null
   }

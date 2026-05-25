@@ -21,7 +21,7 @@ export const runtime     = 'nodejs'
 export const maxDuration = 300   // AI clustering can take 2-3 min on large batches
 
 // Synthesize limit when triggered from this endpoint directly.
-const MAX_SYNTH_CLUSTERS = 5
+const MAX_SYNTH_CLUSTERS = 1
 
 function checkAuth(req: NextRequest): boolean {
   if (!process.env.CRON_SECRET) return true
