@@ -91,8 +91,7 @@ const GROQ_CALL_DELAY_MS = 2_200
 
 /**
  * Pause between consecutive Groq synthesis calls.
- * Synthesis generates ~2000 tokens/call. At Groq's 6000 TPM limit that's
- * ~3 calls/min max. 20 s spacing keeps us safely under both RPM and TPM.
+ * Only used when MAX_CLUSTERS > 1. With 1 cluster/invocation this never fires.
  */
 const GROQ_SYNTH_DELAY_MS = 20_000
 
