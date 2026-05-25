@@ -59,18 +59,38 @@ const STOP_WORDS = new Set([
 //
 // Heuristic approach for Spanish news titles:
 //  • ALL_CAPS sequences ≥ 2 letters (acronyms): FMI, UNC, ONU, UBA, OTAN…
-//  • Capitalized words NOT at position 0 and ≥ 4 chars: proper nouns like
-//    Milei, Putin, Zelensky, Rivera, Clarín, Córdoba, Buenos, Aires…
-//    (position 0 is excluded because Spanish sentences always start capitalised)
+//  • Capitalised words ≥ 4 chars that are NOT common Spanish articles or
+//    adjectives — catches proper nouns like Milei, Putin, Zelensky, Clarín,
+//    Córdoba, Buenos, Aires regardless of position in the sentence.
+//
+// The original code excluded position-0 words to avoid sentence-initial
+// capitalisation false positives, but this also excluded subjects like
+// "Milei presentó..." → zero entities → entity guard falsely rejected valid
+// clusters.  The exclusion list handles the same problem more accurately.
 //
 // This is intentionally lightweight — no NLP library, O(words) per title.
+
+/** Common Spanish words that appear capitalised at sentence start but are NOT
+ *  proper nouns.  We exclude these from entity extraction. */
+const SPANISH_NON_ENTITIES = new Set([
+  'el','la','los','las','un','una','unos','unas','lo',
+  'este','esta','estos','estas','ese','esa','esos','esas',
+  'aquel','aquella','aquellos','aquellas',
+  'nuevo','nueva','nuevos','nuevas',
+  'gran','grandes','primer','primera','segundo','segunda',
+  'ultimo','ultima','tras','ante','bajo','desde','hacia','hasta',
+  'como','cuando','donde','quien','cuya','cuyo','mientras',
+  'aunque','porque','pero','sino','para','sobre','entre',
+  'segun','mediante','durante','desde',
+  'hubo','hubo','sera','fueron','tiene','tienen',
+])
 
 function extractEntities(title: string): Set<string> {
   const entities = new Set<string>()
   const words = title.split(/\s+/)
 
-  for (let i = 0; i < words.length; i++) {
-    const clean = words[i].replace(/[«»"'.,;:!?()\[\]—–\-]/g, '')
+  for (const word of words) {
+    const clean = word.replace(/[«»"'.,;:!?()\[\]—–\-]/g, '')
     if (clean.length < 2) continue
 
     // Acronyms — at least 2 all-uppercase letters (FMI, UNC, UBA, CONICET, etc.)
@@ -79,14 +99,16 @@ function extractEntities(title: string): Set<string> {
       continue
     }
 
-    // Capitalised non-initial words (likely proper nouns)
-    // Require ≥ 4 chars to avoid short ambiguous words ("Del", "Paz", "Mar")
-    if (i > 0 && /^[A-ZÁÉÍÓÚÑ]/.test(clean) && clean.length >= 4) {
+    // Capitalised words likely to be proper nouns:
+    // must be ≥ 4 chars and NOT in the non-entity exclusion list
+    if (/^[A-ZÁÉÍÓÚÑ]/.test(clean) && clean.length >= 4) {
       const normalised = clean
         .toLowerCase()
         .normalize('NFD')
         .replace(/\p{Diacritic}/gu, '')
-      entities.add(normalised)
+      if (!SPANISH_NON_ENTITIES.has(normalised)) {
+        entities.add(normalised)
+      }
     }
   }
 
@@ -102,6 +124,10 @@ function extractEntities(title: string): Set<string> {
  *  • If at least half the articles have entities, at least ONE pair must
  *    share an entity.  If every article has entities but no two share any,
  *    the articles are almost certainly about different events.
+ *
+ * NOTE: This is used as a quality signal for TF-IDF clusters only.
+ *       AI-confirmed clusters skip this check — the AI prompt is strict
+ *       enough to avoid false positives without the entity guard.
  */
 function entityCheckPasses(articles: ArticleInput[]): boolean {
   const sets = articles.map(a => extractEntities(a.title))
@@ -109,8 +135,9 @@ function entityCheckPasses(articles: ArticleInput[]): boolean {
   // Count articles with at least one extractable entity
   const withEntities = sets.filter(s => s.size > 0).length
 
-  // If fewer than half have entities, skip the check (can't be conclusive)
-  if (withEntities < Math.ceil(articles.length / 2)) return true
+  // If fewer than half have entities, skip the check (can't be conclusive).
+  // Threshold: strict majority — more than half must have entities.
+  if (withEntities <= articles.length / 2) return true
 
   // At least one pair must share an entity
   for (let i = 0; i < sets.length; i++) {
@@ -459,13 +486,10 @@ async function _runClusterBatch(
       const freshArts = arts.filter(a => !usedIds.has(a.id))
       if (freshArts.length < 2 || new Set(freshArts.map(a => a.sourceSlug)).size < 2) continue
 
-      // ── Entity overlap guard ─────────────────────────────────────────
-      if (!entityCheckPasses(freshArts)) {
-        console.warn(
-          `[clustering-ai] Entity guard rejected: [${freshArts.map(a => a.sourceSlug).join(', ')}] "${freshArts.map(a => a.title.slice(0, 40)).join('" / "')}"`
-        )
-        continue
-      }
+      // NOTE: No entity guard here — the AI prompt is already strict enough
+      // ("same specific event, ≥1 shared named entity, ≥90% confidence").
+      // Running the entity heuristic on top of AI confirmation causes false
+      // negatives (e.g. "Milei" at sentence position 0 is hard to extract).
 
       // ── Coherence guard ──────────────────────────────────────────────
       if (!clusterIsCoherent(freshArts.map(a => a.id), allArticlesForCoherence)) {
@@ -544,6 +568,35 @@ export async function clusterArticlesWithAI(
     const aiClusters = await _runClusterBatch(unclustered, usedIds, articles)
     allClusters.push(...aiClusters)
     batchCount++
+  }
+
+  // ── Stage 4: Cross-topic fallback ─────────────────────────────────────────
+  //
+  // Articles from different sources often get classified into DIFFERENT topic
+  // buckets for the same story — e.g. "Milei + FMI" lands in "politica" for
+  // source A but "economia" for source B.  Those never see each other in the
+  // per-topic passes above.
+  //
+  // Fix: collect ALL remaining unclustered articles and run one final AI pass
+  // on them.  The AI prompt is strict enough to avoid cross-topic false positives.
+  // We batch at 20 articles max to keep the prompt manageable.
+  const remaining = articles.filter(a => !usedIds.has(a.id))
+  if (remaining.length >= 2) {
+    const CROSS_BATCH = 20
+    for (let start = 0; start < remaining.length; start += CROSS_BATCH) {
+      const batch = remaining.slice(start, start + CROSS_BATCH)
+      if (batch.length < 2) break
+
+      if (batchCount > 0) await new Promise(r => setTimeout(r, 2_500))
+
+      console.log(
+        `[clustering-ai] Cross-topic fallback batch ${Math.floor(start / CROSS_BATCH) + 1}: ` +
+        `${batch.length} articles → AI`
+      )
+      const crossClusters = await _runClusterBatch(batch, usedIds, articles)
+      allClusters.push(...crossClusters)
+      batchCount++
+    }
   }
 
   console.log(`[clustering] Done — ${allClusters.length} clusters from ${articles.length} articles`)
