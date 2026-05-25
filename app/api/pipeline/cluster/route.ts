@@ -20,9 +20,24 @@ export const runtime     = 'nodejs'
 export const maxDuration = 300   // Vercel Pro — AI clustering can take 2-3 min on large batches
 
 function checkAuth(req: NextRequest): boolean {
-  if (!process.env.CRON_SECRET) return true
-  const auth = req.headers.get('authorization') ?? req.headers.get('x-cron-secret') ?? ''
-  return auth === `Bearer ${process.env.CRON_SECRET}` || auth === process.env.CRON_SECRET
+  if (!process.env.CRON_SECRET) {
+    console.log('[cluster] checkAuth: CRON_SECRET not set — open access')
+    return true
+  }
+  const authHeader    = req.headers.get('authorization') ?? ''
+  const xCronSecret   = req.headers.get('x-cron-secret') ?? ''
+  const auth          = authHeader || xCronSecret
+  const ok = auth === `Bearer ${process.env.CRON_SECRET}` || auth === process.env.CRON_SECRET
+  if (!ok) {
+    // Log lengths only — never log the actual secret value
+    console.warn(
+      `[cluster] checkAuth FAILED — ` +
+      `authorization: ${authHeader ? `len=${authHeader.length}` : 'absent'}, ` +
+      `x-cron-secret: ${xCronSecret ? `len=${xCronSecret.length}` : 'absent'}, ` +
+      `CRON_SECRET len: ${process.env.CRON_SECRET.length}`
+    )
+  }
+  return ok
 }
 
 function getSiteOrigin(req: NextRequest): string {
