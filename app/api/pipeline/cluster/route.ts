@@ -26,6 +26,12 @@ function checkAuth(req: NextRequest): boolean {
 }
 
 function getSiteOrigin(req: NextRequest): string {
+  // Prefer the canonical production domain over request-derived host.
+  // Deployment-specific Vercel URLs have Deployment Protection that blocks
+  // internal fetches regardless of the Authorization header.
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  }
   const host  = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'localhost:3000'
   const proto = req.headers.get('x-forwarded-proto') ?? (host.includes('localhost') ? 'http' : 'https')
   return `${proto}://${host}`

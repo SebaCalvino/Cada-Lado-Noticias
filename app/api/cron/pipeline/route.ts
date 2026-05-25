@@ -24,9 +24,20 @@ function checkAuth(req: NextRequest): boolean {
   return auth === `Bearer ${process.env.CRON_SECRET}` || auth === process.env.CRON_SECRET
 }
 
-/** Derive the site origin from request headers.
- *  Works on Vercel (x-forwarded-host), Railway, and local dev. */
+/** Derive the site origin for internal API chaining.
+ *
+ * Priority:
+ *  1. VERCEL_PROJECT_PRODUCTION_URL — Vercel system env, always the canonical
+ *     production domain (e.g. "myapp.vercel.app"), never deployment-specific.
+ *     Deployment-specific URLs (e.g. "myapp-abc123.vercel.app") have Vercel
+ *     Deployment Protection enabled and return 401 for internal fetches even
+ *     when the correct Authorization header is present.
+ *  2. x-forwarded-host / host — fallback for local dev & non-Vercel hosts.
+ */
 function getSiteOrigin(req: NextRequest): string {
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  }
   const host  = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'localhost:3000'
   const proto = req.headers.get('x-forwarded-proto') ?? (host.includes('localhost') ? 'http' : 'https')
   return `${proto}://${host}`
