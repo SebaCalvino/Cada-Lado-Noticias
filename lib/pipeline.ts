@@ -182,5 +182,17 @@ export async function runPipeline() {
     console.log(`[pipeline] Created cluster "${synthesis.title}" with ${arts.length} articles`)
   }
 
+  // Mark singleton articles (not assigned to any cluster) as clustered so they
+  // don't re-enter the TF-IDF pool in subsequent runs and skew IDF weights.
+  const clusteredIds = new Set(clusters.flatMap((c) => c.articleIds))
+  const singletonIds = recentArticles.map((a) => a.id).filter((id) => !clusteredIds.has(id))
+  if (singletonIds.length > 0) {
+    await db
+      .update(rawArticles)
+      .set({ clustered: true })
+      .where(inArray(rawArticles.id, singletonIds))
+    console.log(`[pipeline] Marked ${singletonIds.length} singleton articles as processed`)
+  }
+
   console.log('[pipeline] Complete')
 }
