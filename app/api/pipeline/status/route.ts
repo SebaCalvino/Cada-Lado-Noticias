@@ -95,6 +95,27 @@ export async function GET() {
         )
       )
 
+    // Per-source article count for last 48h
+    const perSource = await db.execute(sql`
+      SELECT s.slug, count(*)::int as cnt
+      FROM raw_articles ra
+      JOIN sources s ON s.id = ra.source_id
+      WHERE ra.scraped_at >= ${cutoff48h}
+      GROUP BY s.slug
+      ORDER BY cnt DESC
+    `)
+
+    // Sample of 10 eligible article titles (newest first)
+    const sample = await db.execute(sql`
+      SELECT ra.id, ra.title, s.slug, ra.published_at
+      FROM raw_articles ra
+      JOIN sources s ON s.id = ra.source_id
+      WHERE ra.scraped_at >= ${cutoff48h}
+        AND ra.id NOT IN (SELECT article_id FROM cluster_articles)
+      ORDER BY ra.published_at DESC NULLS LAST
+      LIMIT 10
+    `)
+
     return NextResponse.json({
       ok: true,
       ts: now.toISOString(),
@@ -107,6 +128,13 @@ export async function GET() {
           title:     latestArticle[0].title?.slice(0, 80),
           scrapedAt: latestArticle[0].scrapedAt?.toISOString(),
         } : null,
+        per_source: [...perSource],
+        sample_eligible: [...sample].map((r: any) => ({
+          id:    r.id,
+          slug:  r.slug,
+          title: (r.title as string)?.slice(0, 100),
+          pub:   r.published_at,
+        })),
       },
       clusters: {
         published,
