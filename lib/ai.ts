@@ -13,17 +13,17 @@ const USER_PROMPT_TEMPLATE = `Analizá las siguientes notas periodísticas sobre
 
 {articles}
 
-Producí un análisis completo en formato JSON con esta estructura exacta:
+Producí un análisis en formato JSON con esta estructura exacta:
 {
   "title": "Título neutral y descriptivo del hecho (máx 100 caracteres)",
-  "synthesis": "Síntesis neutral del hecho redactada como artículo periodístico real, de 500-700 palabras. IMPORTANTE: separar OBLIGATORIAMENTE cada párrafo con un doble salto de línea (dos caracteres \\n seguidos). Estructura: (1) Lead de 2-3 oraciones que responda quién, qué, cuándo, dónde y por qué. \\n\\n (2) Párrafo de contexto y antecedentes. \\n\\n (3) Párrafo con declaraciones o reacciones relevantes. \\n\\n (4) Párrafo con consecuencias, estado actual o perspectiva. Mínimo 4 párrafos separados por \\n\\n. Solo hechos verificables, sin opinión. En castellano argentino.",
-  "key_facts": ["Hecho clave 1", "Hecho clave 2", "Hecho clave 3", "Hecho clave 4", "Hecho clave 5"],
+  "synthesis": "Síntesis neutral de 250-350 palabras. Párrafos separados por \\n\\n. Estructura: (1) Lead con quién, qué, cuándo, dónde. \\n\\n (2) Contexto y antecedentes. \\n\\n (3) Consecuencias o estado actual. Solo hechos verificables, sin opinión. En castellano argentino.",
+  "key_facts": ["Hecho clave 1", "Hecho clave 2", "Hecho clave 3"],
   "category": "Una de: Política, Economía, Sociedad, Seguridad, Internacional, Deportes, Cultura, Tecnología, Ambiente",
   "source_analyses": [
     {
       "source_slug": "slug del medio",
-      "emphasis": "Qué aspectos, ángulos o datos enfatiza este medio. Incluí el tono editorial, a quién le dan voz, qué términos usa y qué perspectiva política o ideológica refleja su cobertura. 3-4 oraciones con sustancia.",
-      "omissions": "Qué datos, voces o contexto relevante omite o minimiza este medio en comparación con los demás. Sé específico: qué fuentes no consultó, qué hechos no menciona, qué contexto histórico o económico ignoró. 3-4 oraciones. Si la cobertura es genuinamente completa, escribí 'Sin omisiones destacadas.'"
+      "emphasis": "Qué aspectos enfatiza este medio y qué perspectiva refleja. 2 oraciones.",
+      "omissions": "Qué datos o voces omite respecto a los demás. 2 oraciones. Si es completa: 'Sin omisiones destacadas.'"
     }
   ]
 }
@@ -72,7 +72,7 @@ async function callGroq(userPrompt: string, attempt = 0): Promise<string> {
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.3,
-      max_tokens:  4000,  // synthesis JSON can be 1500-2500 tokens; be safe
+      max_tokens:  2000,  // reduced prompt targets ~800-1200 tokens output
     }),
     signal: AbortSignal.timeout(25_000),  // 25 s cap: normal Groq call ~5-15 s
   })
