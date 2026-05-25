@@ -95,12 +95,14 @@ export async function GET() {
         )
       )
 
+    const cutoff48hStr = cutoff48h.toISOString()
+
     // Per-source article count for last 48h
     const perSource = await db.execute(sql`
       SELECT s.slug, count(*)::int as cnt
       FROM raw_articles ra
       JOIN sources s ON s.id = ra.source_id
-      WHERE ra.scraped_at >= ${cutoff48h}
+      WHERE ra.scraped_at >= ${cutoff48hStr}::timestamptz
       GROUP BY s.slug
       ORDER BY cnt DESC
     `)
@@ -110,7 +112,7 @@ export async function GET() {
       SELECT ra.id, ra.title, s.slug, ra.published_at
       FROM raw_articles ra
       JOIN sources s ON s.id = ra.source_id
-      WHERE ra.scraped_at >= ${cutoff48h}
+      WHERE ra.scraped_at >= ${cutoff48hStr}::timestamptz
         AND ra.id NOT IN (SELECT article_id FROM cluster_articles)
       ORDER BY ra.published_at DESC NULLS LAST
       LIMIT 10
