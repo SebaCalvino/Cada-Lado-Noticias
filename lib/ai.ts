@@ -84,7 +84,7 @@ async function callGroq(userPrompt: string, attempt = 0): Promise<string> {
       retryAfterHeader
         ? Math.ceil(parseFloat(retryAfterHeader)) * 1000
         : Math.pow(2, attempt) * 4_000,  // 4 s, 8 s, 16 s
-      12_000                              // hard cap: never wait more than 12 s
+      45_000                              // hard cap: up to 45 s to clear TPM limit
     )
     console.warn(`[groq] Rate limited — waiting ${wait / 1000}s (attempt ${attempt + 1}/3)`)
     await new Promise((r) => setTimeout(r, wait))

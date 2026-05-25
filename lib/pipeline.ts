@@ -86,8 +86,15 @@ function isTitleGeneric(title: string): boolean {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Minimum pause between consecutive Groq synthesis calls (30 RPM limit). */
+/** Minimum pause between consecutive Groq AI-clustering calls (30 RPM limit). */
 const GROQ_CALL_DELAY_MS = 2_200
+
+/**
+ * Pause between consecutive Groq synthesis calls.
+ * Synthesis generates ~2000 tokens/call. At Groq's 6000 TPM limit that's
+ * ~3 calls/min max. 20 s spacing keeps us safely under both RPM and TPM.
+ */
+const GROQ_SYNTH_DELAY_MS = 20_000
 
 /** Expand the article window to 96 h if fewer than this many are available. */
 const MIN_ARTICLES_FOR_CLUSTERING = 5
@@ -567,8 +574,9 @@ export async function runSynthesize(
       url:        r.article.url,
     }))
 
-    // Throttle: pause before all calls except the first
-    if (i > 0) await sleep(GROQ_CALL_DELAY_MS)
+    // Throttle: pause before all calls except the first.
+    // Use longer delay for synthesis (heavy token output) vs clustering.
+    if (i > 0) await sleep(GROQ_SYNTH_DELAY_MS)
 
     const synthesis = await synthesizeCluster(artsForSynthesis)
 
