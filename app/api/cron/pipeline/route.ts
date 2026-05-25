@@ -39,9 +39,14 @@ async function handle(request: NextRequest) {
 
   const t0     = Date.now()
   const origin = getSiteOrigin(request)
-  const secret = process.env.CRON_SECRET
+  // Forward the incoming auth header so the cluster endpoint receives valid auth
+  // regardless of which Vercel deployment handles this request.
+  // Fallback: rebuild from CRON_SECRET (e.g. direct curl calls, GitHub Actions).
+  const incomingAuth = request.headers.get('authorization')
+  const secret       = process.env.CRON_SECRET
+  const authHeader   = incomingAuth ?? (secret ? `Bearer ${secret}` : null)
   const headers: HeadersInit = {
-    ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+    ...(authHeader ? { Authorization: authHeader } : {}),
     'Content-Type': 'application/json',
   }
 
