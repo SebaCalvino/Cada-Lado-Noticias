@@ -101,18 +101,17 @@ function parseResponse(raw: string, articles: ArticleForSynthesis[]): SynthesisR
   try {
     let cleaned = raw.trim()
 
-    // Strip ```json ... ``` fences
+    // Strip ```json ... ``` fences (model may wrap output in markdown)
     if (cleaned.includes('```')) {
       const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/)
       if (fenced) cleaned = fenced[1].trim()
     }
 
-    // If there's prose before the JSON, find the first '{' and last '}'
+    // If there's prose BEFORE the JSON object, skip to the first '{'
+    // Do NOT use lastIndexOf('}') — synthesis text may contain '}' and would
+    // truncate the JSON.  Instead, rely on JSON.parse to find the end.
     const firstBrace = cleaned.indexOf('{')
-    const lastBrace  = cleaned.lastIndexOf('}')
-    if (firstBrace !== 0 && firstBrace > -1) {
-      cleaned = cleaned.slice(firstBrace, lastBrace + 1)
-    }
+    if (firstBrace > 0) cleaned = cleaned.slice(firstBrace)
 
     cleaned = cleaned.trim()
 
