@@ -1,0 +1,37 @@
+name: Daily cleanup
+
+# Runs once a day at 06:00 UTC (before the Argentine morning news cycle peaks).
+# Scores every published cluster and deletes low-quality ones, then prunes
+# orphan raw_articles older than 7 days to keep the DB lean.
+#
+# The cleanup endpoint already calls runCleanup() + runArticlePrune() together,
+# so a single POST is enough.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+env:
+  SITE_URL: https://cada-lado-noticias.vercel.app
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Run cleanup + prune
+        run: |
+          echo "$(date -u '+%H:%M UTC') — daily cleanup + prune..."
+          HTTP=$(curl -s -o /tmp/cleanup.json -w "%{http_code}" \
+            -X POST "$SITE_URL/api/pipeline/cleanup?limit=200" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 120)
+          echo "HTTP $HTTP"
+          cat /tmp/cleanup.json || true
+          if [[ "$HTTP" != "200" ]]; then
+            echo "::error::Cleanup failed (HTTP $HTTP)"
+            exit 1
+          fi

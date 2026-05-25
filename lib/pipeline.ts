@@ -32,6 +32,58 @@ import {
 } from './clustering'
 import { synthesizeCluster, type ArticleForSynthesis } from './ai'
 
+// ─── Generic-title filter ─────────────────────────────────────────────────────
+
+const TITLE_STOP_WORDS = new Set([
+  'de','la','que','el','en','y','a','los','del','se','las','por','un','para',
+  'con','una','su','al','lo','como','pero','sus','le','ya','o','este','si',
+  'sobre','tambien','tras','hacia','desde','hasta','entre','muy','mas','tan',
+  'fue','ser','es','son','han','ha','tiene','tienen','sera','estan','puede',
+  'dice','dijo','afirma','senalo','aseguro','indico','informo','revelo',
+  'gobierno','pais','nuevo','nueva','nuevos','nuevas','ante','bajo','hace',
+  'cuando','donde','quien','cual','cuyo','cuales','quienes','porque','aunque',
+  'este','esta','estos','estas','ese','esa','esos','esas',
+  'todo','toda','todos','todas','otro','otra','otros','otras',
+  'caso','anno','anos','mes','meses','dias','hoy','ayer',
+  'noticia','informe','situacion','problema','crisis','medida','medidas',
+  'primer','primera','segundo','segunda','gran','grande',
+  'nacional','local','regional','provincial','federal','importante',
+  'inicio','final','reunion','declaracion','declaraciones','sesion',
+])
+
+/**
+ * Returns true if the AI-generated title looks too generic to be useful.
+ *
+ * A title is considered generic if it has BOTH:
+ *   - ≤ 3 significant words (not in the stop-word list, ≥ 4 chars)
+ *   - No proper noun (capitalized word that isn't the first token)
+ *
+ * Clusters with a generic title are deleted so their articles re-enter the
+ * eligible pool rather than surfacing uninformative stories.
+ */
+function isTitleGeneric(title: string): boolean {
+  const normalized = title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+
+  const significant = normalized
+    .split(/\W+/)
+    .filter(w => w.length >= 4 && !TITLE_STOP_WORDS.has(w))
+
+  if (significant.length > 3) return false  // enough substance — not generic
+
+  // Too few significant words AND no proper noun → generic
+  const words = title.trim().split(/\s+/)
+  const hasProperNoun = words.some((word, i) => {
+    if (i === 0) return false  // first word is always capitalised in any title
+    const clean = word.replace(/[^a-záéíóúüñA-ZÁÉÍÓÚÜÑ]/g, '')
+    return clean.length >= 2 && /^[A-ZÁÉÍÓÚÜÑ]/.test(clean)
+  })
+
+  return !hasProperNoun
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Minimum pause between consecutive Groq synthesis calls (30 RPM limit). */
@@ -308,14 +360,23 @@ export async function runCluster(
   // Build ArticleInput list from ALL eligible articles, then reorder so
   // cross-source keyword candidates come first.  Slice to maxArticles AFTER
   // reordering so the batch is filled with the highest-potential articles.
+  //
+  // "en vivo" articles are excluded: they update continuously and are almost
+  // always one-source-only, producing noisy, short-lived clusters.
   const allInputs: ArticleInput[] = eligible
     .filter(a => sourceMap[a.sourceId])
+    .filter(a => !/en\s+vivo/i.test(a.title))
     .map(a => ({
       id:         a.id,
       title:      a.title,
       summary:    a.summary || '',
       sourceSlug: sourceMap[a.sourceId].slug,
     }))
+
+  if (allInputs.length < 2) {
+    console.log('[cluster] Not enough articles after filtering — done')
+    return { clustersCreated: 0, singletons: 0 }
+  }
 
   const prioritised = prioritiseByKeywordOverlap(allInputs)
   const inputs      = prioritised.slice(0, maxArticles)
@@ -351,11 +412,38 @@ export async function runCluster(
     const arts = batch.filter(a => cluster.articleIds.includes(a.id))
     if (arts.length < 2) continue
 
-    const articleIds = arts.map(a => a.id)
-    const imageUrl   = arts.find(a => a.imageUrl)?.imageUrl ?? null
+    // All original article IDs — used for markProcessed (includes duplicates)
+    const allArticleIds = arts.map(a => a.id)
 
-    // Provisional title from the first article — replaced by AI in Phase 3
-    const provisionalTitle = arts[0].title
+    // ── Source deduplication ──────────────────────────────────────────────────
+    // Keep at most 1 article per source: the one with the highest similarity
+    // score.  Multiple articles from the same outlet covering the same story
+    // add no editorial diversity and inflate the synthesis prompt with
+    // redundant text.
+    const bestBySource = new Map<string, typeof arts[0]>()
+    for (const art of arts) {
+      const slug  = sourceMap[art.sourceId]?.slug ?? String(art.sourceId)
+      const score = cluster.similarityScores[art.id] ?? 0
+      const prev  = bestBySource.get(slug)
+      if (!prev || (cluster.similarityScores[prev.id] ?? 0) < score) {
+        bestBySource.set(slug, art)
+      }
+    }
+    const deduplicatedArts = Array.from(bestBySource.values())
+
+    if (deduplicatedArts.length < 2) {
+      // After dedup only 1 source remains — treat as singleton
+      console.log(
+        `[cluster] Skipping cluster (collapsed to 1 source after dedup): ` +
+        `"${arts[0].title.slice(0, 60)}"`
+      )
+      await markProcessed(allArticleIds)
+      continue
+    }
+
+    const imageUrl        = deduplicatedArts.find(a => a.imageUrl)?.imageUrl ?? null
+    // Provisional title from the first deduplicated article — replaced by AI in Phase 3
+    const provisionalTitle = deduplicatedArts[0].title
 
     const [savedCluster] = await db
       .insert(newsClusters)
@@ -365,18 +453,18 @@ export async function runCluster(
         keyFacts:    null,
         category:    null,
         publishedAt: new Date(),
-        sourceCount: new Set(cluster.sourceSlugs).size,
+        sourceCount: deduplicatedArts.length,
         imageUrl,
       })
       .returning()
 
     if (!savedCluster) {
-      await markProcessed(articleIds)
+      await markProcessed(allArticleIds)
       continue
     }
 
-    // Link articles to cluster (no emphasis/omissions yet)
-    for (const art of arts) {
+    // Link deduplicated articles to cluster (no emphasis/omissions yet)
+    for (const art of deduplicatedArts) {
       await db
         .insert(clusterArticles)
         .values({
@@ -390,10 +478,13 @@ export async function runCluster(
         .onConflictDoNothing()
     }
 
-    await markProcessed(articleIds)
+    // Mark ALL original articles as processed — including per-source "losers"
+    // so they don't re-enter the pool and create duplicate clusters.
+    await markProcessed(allArticleIds)
     created++
     console.log(
-      `[cluster] ✓ Cluster ${created}: "${provisionalTitle.slice(0, 60)}" (${arts.length} articles)`
+      `[cluster] ✓ Cluster ${created}: "${provisionalTitle.slice(0, 60)}" ` +
+      `(${deduplicatedArts.length} sources, ${arts.length} raw articles)`
     )
   }
 
@@ -486,6 +577,21 @@ export async function runSynthesize(
         `[synthesize] Synthesis failed for cluster ${cluster.id} — deleting for retry`
       )
       // Delete cluster + its links so articles re-enter the eligible pool
+      await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
+      await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
+      failed++
+      continue
+    }
+
+    // ── Generic-title guard ───────────────────────────────────────────────────
+    // Discard clusters whose AI-generated title has ≤ 3 significant words AND
+    // no proper noun — a reliable signal that the cluster is either too vague
+    // to be informative or that unrelated articles were merged.
+    if (isTitleGeneric(synthesis.title)) {
+      console.warn(
+        `[synthesize] Cluster ${cluster.id} rejected — title too generic: ` +
+        `"${synthesis.title}"`
+      )
       await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
       await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
       failed++

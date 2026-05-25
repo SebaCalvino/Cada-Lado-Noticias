@@ -7,7 +7,7 @@ name: Pipeline backup
 on:
   schedule:
     - cron: '7,22,37,52 * * * *'
-  workflow_dispatch:   # manual trigger from GitHub UI
+  workflow_dispatch:
 
 env:
   SITE_URL: https://cada-lado-noticias.vercel.app
@@ -18,23 +18,51 @@ jobs:
     timeout-minutes: 8
 
     steps:
-      - name: Ingest (triggers cluster via waitUntil)
+      - name: Ingest (triggers cluster + synthesize via waitUntil)
+        id: ingest
         run: |
           echo "$(date -u '+%H:%M UTC') — triggering ingest..."
-          curl -sf -X POST "$SITE_URL/api/cron/pipeline" \
+          HTTP=$(curl -s -o /tmp/ingest.json -w "%{http_code}" \
+            -X POST "$SITE_URL/api/cron/pipeline" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            -w "\nHTTP %{http_code}\n" || echo "Non-fatal: ingest call failed"
+            --max-time 30)
+          echo "HTTP $HTTP"
+          cat /tmp/ingest.json || true
+          echo "http_code=$HTTP" >> "$GITHUB_OUTPUT"
+          if [[ "$HTTP" != "200" && "$HTTP" != "208" ]]; then
+            echo "::warning::Ingest returned unexpected HTTP $HTTP"
+          fi
 
-      - name: Wait for cluster phase (~2.5 min)
+      - name: Wait for cluster + synthesize chain (~2.5 min)
+        # Only wait if ingest actually ran (200). A 208 means it was skipped
+        # (scraped recently) — no point waiting for phases that won't fire.
+        if: steps.ingest.outputs.http_code == '200'
         run: sleep 150
 
-      - name: Synthesize safety net
-        # Catches any clusters with synthesis=null that the waitUntil chain missed
-        # (Vercel killed the function early, cold start delay, race condition, etc.)
+      - name: Synthesize safety net (catch stragglers)
+        # Picks up any clusters with synthesis=null that the waitUntil chain
+        # missed (cold start, Vercel function killed early, race condition…).
+        if: steps.ingest.outputs.http_code == '200'
         run: |
           echo "$(date -u '+%H:%M UTC') — synthesize safety net..."
-          curl -sf -X POST "$SITE_URL/api/pipeline/synthesize" \
+          HTTP=$(curl -s -o /tmp/synth.json -w "%{http_code}" \
+            -X POST "$SITE_URL/api/pipeline/synthesize" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            -w "\nHTTP %{http_code}\n" || echo "Non-fatal: synthesize call failed"
+            --max-time 30)
+          echo "HTTP $HTTP"
+          cat /tmp/synth.json || true
+          if [[ "$HTTP" != "200" ]]; then
+            echo "::warning::Synthesize safety net returned HTTP $HTTP"
+          fi
+
+      - name: Health check
+        if: always()
+        run: |
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+            "$SITE_URL/api/health" --max-time 10)
+          echo "Site health: HTTP $HTTP"
+          if [[ "$HTTP" != "200" ]]; then
+            echo "::warning::Health check failed (HTTP $HTTP) — site may be down"
+          fi
