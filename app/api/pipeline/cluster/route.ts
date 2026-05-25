@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
   try {
     // runCluster must finish FIRST so new clusters are in the DB before
     // synthesize is triggered — otherwise synthesize finds 0 pending and exits.
-    const { clustersCreated, singletons } = await runCluster(40)
+    const { clustersCreated, singletons } = await runCluster(80)
     const clusterMs = Date.now() - t0
 
     // NOW trigger synthesize — clusters are persisted, safe to pick them up

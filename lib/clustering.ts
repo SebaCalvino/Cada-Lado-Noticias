@@ -288,12 +288,12 @@ function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): numbe
 
 /**
  * TF-IDF clustering with union-find.
- * Threshold raised to 0.22 (was 0.15).  Also applies the entity overlap guard
- * to the final group results before returning them.
+ * Threshold 0.12 — lower than a strict match but above noise.  The entity
+ * overlap guard still runs on TF-IDF results to filter false positives.
  */
 export function clusterArticles(
   articles: ArticleInput[],
-  threshold = 0.22
+  threshold = 0.12
 ): ClusterResult[] {
   if (articles.length < 2) return []
 
@@ -393,39 +393,21 @@ export function clusterIsCoherent(
 
 // ── AI clustering (Groq) ──────────────────────────────────────────────────────
 
-const STRICT_PROMPT_HEADER = `Sos un editor jefe muy exigente. Tu única tarea: identificar pares de artículos que cubren EXACTAMENTE el mismo evento específico.
+// Prompt for AI clustering — kept short and direct so the model doesn't
+// over-refuse.  Strict "same specific event" requirement is embedded in the
+// task description, not in a list of scary prohibitions.
+const CLUSTER_PROMPT_HEADER = `Sos un editor de noticias argentino. Revisá los artículos y agrupalós si dos o más cubren EXACTAMENTE el mismo hecho específico (mismo evento, mismos protagonistas principales, misma fecha aproximada).
 
-REQUISITOS para agrupar (deben cumplirse TODOS):
-1. Mismo hecho puntual — no solo el mismo tema general
-2. Al menos un protagonista, organización o lugar concreto en común (nombre propio, sigla, ciudad)
-3. Contexto temporal similar (mismo día o período muy cercano)
-4. Confianza ≥ 90%
+Condiciones para agrupar:
+- Mismo suceso concreto (no solo el mismo tema general)
+- Comparten al menos un nombre propio, sigla, cifra o lugar en común
+- Publicados con un par de días de diferencia como máximo
 
-PROHIBIDO agrupar si:
-• Solo comparten una categoría temática ("economía", "política", "internacional")
-• Comparten una palabra genérica ("elecciones", "privatización", "ataque") pero hablan de eventos distintos
-• Son de países, instituciones o eventos diferentes sin relación directa
-• No comparten ningún nombre propio, sigla o lugar en común
-• Tenés menos del 90% de certeza
+Respondé SOLO con JSON válido, sin texto adicional:
+{"groups": [[1,3],[2,5,7]]}
+Sin grupos: {"groups": []}
 
-EJEMPLOS DE ERRORES GRAVES (nunca hacer esto):
-❌ "Elecciones en la Facultad de Artes de la UNC" + "Cómo los gatos eligen a su humano preferido"
-   → solo comparten el verbo "elegir" — instituciones y temas completamente distintos
-❌ "Rusia lanza ataque con misiles contra Kiev" + "Trump negocia acuerdo con Irán"
-   → ambos son internacionales pero eventos 100% distintos con actores distintos
-❌ "Milei habla del acuerdo con el FMI" + "El Banco Central sube las tasas"
-   → misma categoría económica, distintos hechos, distintos protagonistas
-❌ "Privatización de rutas nacionales" + "Juicio por los Cuadernos de la corrupción"
-   → ambos son política/economía pero eventos totalmente distintos de distintas épocas
-❌ "Elecciones universitarias en la UBA" + "Elecciones universitarias en la UNLP"
-   → misma temática pero instituciones y eventos distintos
-
-EJEMPLO CORRECTO:
-✓ "Milei firma el DNU sobre desregulación" + "El Gobierno publicó el polémico DNU desregulador"
-  → mismo decreto específico, mismos protagonistas, mismo día ✓
-
-IMPORTANTE: Preferí NO agrupar antes que agrupar mal. Un cluster incorrecto destruye la credibilidad del producto.
-
+Artículos:
 `
 
 async function _runClusterBatch(
@@ -439,10 +421,7 @@ async function _runClusterBatch(
     .map((a, i) => `${i + 1}. [${a.sourceSlug}] ${a.title}`)
     .join('\n')
 
-  const prompt =
-    STRICT_PROMPT_HEADER +
-    numbered +
-    '\n\nRespondé SOLO con JSON válido, sin texto adicional:\n{"groups": [[1,3], [2,5,7]]}\n\nSolo grupos de 2+ artículos de fuentes DISTINTAS con ≥90% certeza. Sin grupos → {"groups": []}.'
+  const prompt = CLUSTER_PROMPT_HEADER + numbered
 
   const callGroq = () =>
     fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -547,8 +526,8 @@ export async function clusterArticlesWithAI(
   for (const [topic, topicArts] of byTopic) {
     if (topicArts.length < 2) continue
 
-    // Stage 2: TF-IDF within topic (threshold 0.22, entity guard included)
-    const tfidfClusters = clusterArticles(topicArts, 0.22)
+    // Stage 2: TF-IDF within topic — entity guard still applied on results
+    const tfidfClusters = clusterArticles(topicArts, 0.12)
     for (const c of tfidfClusters) {
       const freshIds   = c.articleIds.filter(id => !usedIds.has(id))
       const freshSlugs = freshIds.map(id => topicArts.find(a => a.id === id)!.sourceSlug)
