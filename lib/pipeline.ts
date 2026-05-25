@@ -346,14 +346,21 @@ export async function runCluster(
   const sourceMap: Record<number, { slug: string; name: string }> = {}
   for (const s of allSources) sourceMap[s.id] = { slug: s.slug, name: s.name }
 
-  // Fetch eligible articles (48 h window, expand to 96 h if thin)
-  const WINDOW_48H = new Date(Date.now() - 48 * 60 * 60 * 1000)
-  const WINDOW_96H = new Date(Date.now() - 96 * 60 * 60 * 1000)
+  // Fetch eligible articles (6 h window, expand to 24 h if thin).
+  //
+  // A short primary window keeps the pool small (≈ articles from the last
+  // 2-3 scrape cycles) so same-story articles from different sources that
+  // were scraped a few minutes apart are ALL present in the batch together.
+  // This fixes the time-stagger problem: without a short window, an article
+  // scraped at 10:00 could be marked as a singleton BEFORE a matching article
+  // from a different source is published at 10:15.
+  const WINDOW_6H  = new Date(Date.now() -  6 * 60 * 60 * 1000)
+  const WINDOW_24H = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-  let { toProcess: eligible } = await fetchClusterableArticles(WINDOW_48H)
+  let { toProcess: eligible } = await fetchClusterableArticles(WINDOW_6H)
   if (eligible.length < MIN_ARTICLES_FOR_CLUSTERING) {
-    console.log(`[cluster] Thin content (${eligible.length} in 48 h) — expanding to 96 h`)
-    ;({ toProcess: eligible } = await fetchClusterableArticles(WINDOW_96H))
+    console.log(`[cluster] Thin content (${eligible.length} in 6 h) — expanding to 24 h`)
+    ;({ toProcess: eligible } = await fetchClusterableArticles(WINDOW_24H))
   }
 
   console.log(`[cluster] ${eligible.length} eligible articles — building prioritised batch`)
@@ -404,12 +411,19 @@ export async function runCluster(
   }
   console.log(`[cluster] Found ${clusters.length} clusters`)
 
-  // Mark singletons immediately so they don't queue-up forever
+  // Do NOT mark non-clustered articles as singletons here.
+  //
+  // Rationale: different sources cover the same breaking story at different
+  // times.  If we mark an article as a singleton immediately, it becomes
+  // ineligible before a matching article from another outlet is scraped in
+  // the next cycle.  Instead we let articles accumulate in the pool for the
+  // full 6-hour window and age out naturally — no manual singleton marking
+  // needed.  Articles that DO form clusters are marked clustered=true via
+  // markProcessed() below when the cluster is persisted.
   const articlesInClusters = new Set(clusters.flatMap(c => c.articleIds))
-  const singletonIds = inputs.filter(a => !articlesInClusters.has(a.id)).map(a => a.id)
-  if (singletonIds.length > 0) {
-    await markProcessed(singletonIds)
-    console.log(`[cluster] Marked ${singletonIds.length} singletons as processed`)
+  const singletonCount = inputs.filter(a => !articlesInClusters.has(a.id)).length
+  if (singletonCount > 0) {
+    console.log(`[cluster] ${singletonCount} articles not clustered this run — will retry in next cycle`)
   }
 
   // Persist clusters WITHOUT synthesis — Phase 3 will fill that in
@@ -494,8 +508,8 @@ export async function runCluster(
     )
   }
 
-  console.log(`[cluster] Done — ${created} clusters created, ${singletonIds.length} singletons`)
-  return { clustersCreated: created, singletons: singletonIds.length }
+  console.log(`[cluster] Done — ${created} clusters created, ${singletonCount} not-yet-clustered`)
+  return { clustersCreated: created, singletons: singletonCount }
 }
 
 // ─── Phase 3: Synthesize ──────────────────────────────────────────────────────
