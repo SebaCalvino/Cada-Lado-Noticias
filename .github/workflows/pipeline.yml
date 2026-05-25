@@ -43,6 +43,9 @@ jobs:
       - name: Synthesize safety net (catch stragglers)
         # Picks up any clusters with synthesis=null that the waitUntil chain
         # missed (cold start, Vercel function killed early, race condition…).
+        # max-time 280 = just under Vercel's 300 s maxDuration for this endpoint.
+        # The step is always non-fatal (|| true) because a timeout here is fine —
+        # Vercel continues synthesizing even after the HTTP response is delayed.
         if: steps.ingest.outputs.http_code == '200'
         run: |
           echo "$(date -u '+%H:%M UTC') — synthesize safety net..."
@@ -50,10 +53,10 @@ jobs:
             -X POST "$SITE_URL/api/pipeline/synthesize" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            --max-time 30)
-          echo "HTTP $HTTP"
-          cat /tmp/synth.json || true
-          if [[ "$HTTP" != "200" ]]; then
+            --max-time 280) || true
+          echo "HTTP ${HTTP:-timeout}"
+          cat /tmp/synth.json 2>/dev/null || true
+          if [[ -n "$HTTP" && "$HTTP" != "200" ]]; then
             echo "::warning::Synthesize safety net returned HTTP $HTTP"
           fi
 

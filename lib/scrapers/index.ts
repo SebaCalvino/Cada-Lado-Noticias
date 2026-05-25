@@ -2,19 +2,24 @@ import { scrapeRSS, type ArticleData } from './base'
 
 export { type ArticleData } from './base'
 
+// RSS URLs last verified: 2026-05-25
+// To re-verify: fetch each URL and confirm it returns valid RSS/XML with <item> tags.
 export const SCRAPERS = [
+  // ── Verified working ────────────────────────────────────────────────────────
   { slug: 'clarin',      rssUrl: 'https://www.clarin.com/rss/lo-ultimo/' },
   { slug: 'lanacion',    rssUrl: 'https://www.lanacion.com.ar/arc/outboundfeeds/rss/' },
-  { slug: 'infobae',     rssUrl: 'https://www.infobae.com/feeds/rss/' },
-  { slug: 'pagina12',    rssUrl: 'https://www.pagina12.com.ar/rss/portada' },
-  { slug: 'ambito',      rssUrl: 'https://www.ambito.com/rss' },
-  { slug: 'cronista',    rssUrl: 'https://www.cronista.com/rss/ultimas-noticias/' },
+  { slug: 'infobae',     rssUrl: 'https://www.infobae.com/arc/outboundfeeds/rss/' },
+  { slug: 'pagina12',    rssUrl: 'https://www.pagina12.com.ar/arc/outboundfeeds/rss/secciones/el-pais/notas' },
+  { slug: 'ambito',      rssUrl: 'https://www.ambito.com/rss/pages/ultimas-noticias.xml' },
+  { slug: 'cronista',    rssUrl: 'https://www.cronista.com/files/rss/news.xml' },
   { slug: 'perfil',      rssUrl: 'https://www.perfil.com/feed/' },
   { slug: 'laizquierda', rssUrl: 'https://www.laizquierdadiario.com/spip.php?page=backend' },
+  { slug: 'mdzol',       rssUrl: 'https://www.mdzol.com/rss/pages/noticias.xml' },
+  // ── Unverified — may work from Vercel even if blocked by some proxies ──────
   { slug: 'tn',          rssUrl: 'https://tn.com.ar/rss/todas_las_noticias.xml' },
-  { slug: 'eldestape',   rssUrl: 'https://www.eldestapeweb.com/rss/home.xml' },
-  { slug: 'mdzol',       rssUrl: 'https://www.mdzol.com/rss' },
-  { slug: 'minutouno',   rssUrl: 'https://www.minutouno.com/rss' },
+  // ── Disabled — RSS discontinued or not publicly accessible (2026-05-25) ────
+  // { slug: 'eldestape',   rssUrl: '' },   // eldestapeweb.com removed public RSS
+  // { slug: 'minutouno',   rssUrl: '' },   // minutouno.com removed public RSS
 ]
 
 export async function runAllScrapers(): Promise<
