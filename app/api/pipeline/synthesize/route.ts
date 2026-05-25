@@ -27,7 +27,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runSynthesize } from '@/lib/pipeline'
 
 export const runtime     = 'nodejs'
-export const maxDuration = 120  // 10 clusters × ~10 s each (delay + API call)
+export const maxDuration = 300  // llama-3.3-70b takes ~20s/cluster; 10 × 22s = 220s < 300s
 
 // Limit per invocation.  Keeps execution within maxDuration even if a large
 // backlog of pending clusters exists.  The next cron run will continue from
