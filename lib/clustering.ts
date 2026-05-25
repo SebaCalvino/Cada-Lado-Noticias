@@ -452,7 +452,9 @@ async function _runClusterBatch(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model:       process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+        // llama-3.3-70b-versatile: far better instruction following than 8b-instant
+        // at the same 30 RPM rate limit on Groq.  Override with GROQ_CLUSTER_MODEL.
+        model:       process.env.GROQ_CLUSTER_MODEL || 'llama-3.3-70b-versatile',
         messages:    [{ role: 'user', content: prompt }],
         temperature: 0.0,
         max_tokens:  1500,
@@ -486,18 +488,15 @@ async function _runClusterBatch(
       const freshArts = arts.filter(a => !usedIds.has(a.id))
       if (freshArts.length < 2 || new Set(freshArts.map(a => a.sourceSlug)).size < 2) continue
 
-      // NOTE: No entity guard here — the AI prompt is already strict enough
-      // ("same specific event, ≥1 shared named entity, ≥90% confidence").
-      // Running the entity heuristic on top of AI confirmation causes false
-      // negatives (e.g. "Milei" at sentence position 0 is hard to extract).
-
-      // ── Coherence guard ──────────────────────────────────────────────
-      if (!clusterIsCoherent(freshArts.map(a => a.id), allArticlesForCoherence)) {
-        console.warn(
-          `[clustering-ai] Coherence guard rejected: [${freshArts.map(a => a.sourceSlug).join(', ')}] "${freshArts.map(a => a.title.slice(0, 40)).join('" / "')}"`
-        )
-        continue
-      }
+      // NOTE: No entity or coherence guards here.
+      //
+      // The AI prompt is already strict enough ("same specific event, ≥1 shared
+      // named entity, ≥90% confidence").  Running TF-IDF coherence on top of
+      // AI confirmation causes critical false negatives: outlets deliberately
+      // use different vocabulary for the same event (e.g. Clarín says "acuerdo
+      // con el FMI", Página 12 says "capitulación ante el Fondo") and the cosine
+      // between those two articles is near zero even though they cover the same
+      // fact.  Trust the AI.  Remove this comment if you add better validation.
 
       for (const a of freshArts) usedIds.add(a.id)
       const simScores: Record<number, number> = {}
