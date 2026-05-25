@@ -20,7 +20,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { runCleanup } from '@/lib/pipeline'
+import { runCleanup, runArticlePrune } from '@/lib/pipeline'
 
 export const runtime     = 'nodejs'
 export const maxDuration = 120   // 100 clusters × ~1 DB round-trip ≈ 80 s p99
@@ -45,17 +45,24 @@ export async function POST(request: NextRequest) {
   const maxClusters = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 100
 
   try {
-    const { deleted, checked } = await runCleanup(maxClusters)
+    const [{ deleted, checked }, { pruned }] = await Promise.all([
+      runCleanup(maxClusters),
+      runArticlePrune(7),
+    ])
     const cleanupMs = Date.now() - t0
 
-    console.log(`[cleanup] Done in ${cleanupMs} ms — ${deleted} deleted, ${checked} checked`)
+    console.log(
+      `[cleanup] Done in ${cleanupMs} ms — ${deleted} clusters deleted, ` +
+      `${checked} checked, ${pruned} orphan articles pruned`
+    )
 
     return NextResponse.json({
       ok:         true,
       deleted,
       checked,
+      pruned,
       cleanupMs,
-      message:    `Cleanup complete — ${deleted} clusters deleted out of ${checked} checked`,
+      message:    `Cleanup complete — ${deleted} clusters deleted, ${pruned} orphan articles pruned`,
     })
   } catch (err) {
     console.error('[cleanup] Error:', err)

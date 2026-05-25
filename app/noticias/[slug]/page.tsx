@@ -2,6 +2,7 @@ import { Fragment } from 'react'
 import { notFound }  from 'next/navigation'
 import Link          from 'next/link'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
+import type { Metadata } from 'next'
 import { getNewsDetailServer, getNewsClustersServer } from '@/lib/queries'
 import { timeAgo, noticiaHref } from '@/lib/utils'
 import HeadlineComparison  from '@/components/HeadlineComparison'
@@ -12,8 +13,55 @@ import CommentsSection     from '@/components/CommentsSection'
 
 export const dynamic = 'force-dynamic'
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cada-lado-noticias.vercel.app'
+
 interface Props {
   params: { slug: string }
+}
+
+// ── Metadata (OG tags, Twitter card) ─────────────────────────────────────────
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const lastPart = params.slug.split('-').pop() ?? ''
+  const id = parseInt(lastPart, 10)
+  if (isNaN(id)) return {}
+
+  const cluster = await getNewsDetailServer(id)
+  if (!cluster) return {}
+
+  const title       = cluster.title ?? 'Noticia'
+  const description = cluster.synthesis
+    ? cluster.synthesis.slice(0, 160).replace(/\n/g, ' ') + (cluster.synthesis.length > 160 ? '…' : '')
+    : 'Cobertura comparativa de medios argentinos.'
+
+  // Pass data via query params — OG route renders from these
+  const ogParams = new URLSearchParams({
+    title:    title.slice(0, 120),
+    synthesis: (cluster.synthesis ?? '').slice(0, 140),
+    ...(cluster.category ? { category: cluster.category } : {}),
+  })
+  const ogImage = `${SITE_URL}/api/og?${ogParams.toString()}`
+
+  return {
+    title:       `${title} — Cada Lado`,
+    description,
+    openGraph: {
+      title,
+      description,
+      url:       `${SITE_URL}${noticiaHref(id, title)}`,
+      siteName:  'Cada Lado Noticias',
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+      locale:    'es_AR',
+      type:      'article',
+      publishedTime: cluster.published_at ?? undefined,
+    },
+    twitter: {
+      card:        'summary_large_image',
+      title,
+      description,
+      images:      [ogImage],
+    },
+  }
 }
 
 // ── Design tokens —————————————————————————————————————————————————————————————

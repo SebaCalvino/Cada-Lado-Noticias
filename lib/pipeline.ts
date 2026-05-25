@@ -22,7 +22,7 @@
  */
 
 import { db, sources, rawArticles, newsClusters, clusterArticles } from './db'
-import { eq, and, gte, inArray, isNull, isNotNull, ne, asc, desc, sql } from 'drizzle-orm'
+import { eq, and, gte, lt, inArray, isNull, isNotNull, ne, asc, desc, sql } from 'drizzle-orm'
 import { runAllScrapers } from './scrapers'
 import {
   clusterArticlesWithAI,
@@ -629,6 +629,60 @@ export async function runCleanup(
 
   console.log(`[cleanup] Done — ${deleted} deleted out of ${checked} checked`)
   return { deleted, checked }
+}
+
+// ─── Phase 5: Prune ───────────────────────────────────────────────────────────
+
+/**
+ * Delete orphan raw_articles that are older than `maxAgeDays` days and are NOT
+ * referenced by any cluster_articles row.
+ *
+ * Why:  raw_articles accumulates every scraped item forever.  Articles that
+ *       were marked as singletons (no cluster match) or that simply never
+ *       clustered are useless after a week and inflate DB size.
+ *
+ * Safety:  We join against cluster_articles and only delete rows with NO match,
+ *          so we will never touch an article that belongs to a published story.
+ *
+ * Designed to be fast (single DELETE … WHERE NOT IN subquery).
+ */
+export async function runArticlePrune(
+  maxAgeDays = 7
+): Promise<{ pruned: number }> {
+  if (!process.env.DATABASE_URL) throw new Error('[prune] DATABASE_URL is not set')
+
+  const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1_000)
+
+  // IDs that ARE in at least one cluster — never touch these
+  const linkedRows = await db
+    .select({ articleId: clusterArticles.articleId })
+    .from(clusterArticles)
+
+  const linkedIds = linkedRows.map(r => r.articleId)
+
+  // Delete old orphans
+  const toDelete = await db
+    .select({ id: rawArticles.id })
+    .from(rawArticles)
+    .where(
+      and(
+        lt(rawArticles.scrapedAt, cutoff),
+        linkedIds.length > 0
+          ? sql`${rawArticles.id} NOT IN (${sql.join(linkedIds.map(id => sql`${id}`), sql`, `)})`
+          : sql`1=1`   // no linked articles at all → prune everything old
+      )
+    )
+
+  if (toDelete.length === 0) {
+    console.log('[prune] No orphan articles to prune')
+    return { pruned: 0 }
+  }
+
+  const deleteIds = toDelete.map(r => r.id)
+  await db.delete(rawArticles).where(inArray(rawArticles.id, deleteIds))
+
+  console.log(`[prune] Pruned ${deleteIds.length} orphan articles older than ${maxAgeDays} days`)
+  return { pruned: deleteIds.length }
 }
 
 // ─── Legacy wrapper (manual triggers / dev) ───────────────────────────────────

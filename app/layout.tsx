@@ -28,8 +28,14 @@ const jetbrainsMono = JetBrains_Mono({
   display: 'swap',
 })
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cada-lado-noticias.vercel.app'
+
 export const metadata: Metadata = {
-  title: 'Cada Lado Noticias - La misma noticia, todas las voces',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'Cada Lado Noticias — La misma noticia, todas las voces',
+    template: '%s — Cada Lado',
+  },
   description:
     'Compará cómo cada diario argentino cubre la misma noticia. Síntesis neutral + análisis de qué dice y qué omite cada medio.',
   icons: {
@@ -37,9 +43,26 @@ export const metadata: Metadata = {
     apple: '/images/logo-cl.svg',
   },
   openGraph: {
-    title: 'Cada Lado Noticias',
+    title:       'Cada Lado Noticias',
     description: 'La misma noticia, todas las voces. Sin que te vendan humo.',
-    type: 'website',
+    url:         SITE_URL,
+    siteName:    'Cada Lado Noticias',
+    locale:      'es_AR',
+    type:        'website',
+    images: [
+      {
+        url:    `${SITE_URL}/api/og`,
+        width:  1200,
+        height: 630,
+        alt:    'Cada Lado Noticias',
+      },
+    ],
+  },
+  twitter: {
+    card:        'summary_large_image',
+    title:       'Cada Lado Noticias',
+    description: 'La misma noticia, todas las voces.',
+    images:      [`${SITE_URL}/api/og`],
   },
 }
 
