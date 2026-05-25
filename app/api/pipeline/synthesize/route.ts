@@ -32,7 +32,8 @@ export const maxDuration = 300  // llama-3.3-70b takes ~20s/cluster; 10 × 22s =
 // Limit per invocation.  Keeps execution within maxDuration even if a large
 // backlog of pending clusters exists.  The next cron run will continue from
 // where this one left off.
-const MAX_CLUSTERS = 10
+// 5 clusters × worst-case 55 s (3 rate-limit retries) = 275 s < 300 s budget.
+const MAX_CLUSTERS = 5
 
 function checkAuth(req: NextRequest): boolean {
   if (!process.env.CRON_SECRET) return true

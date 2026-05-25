@@ -51,6 +51,8 @@ export interface SynthesisResult {
 }
 
 async function callGroq(userPrompt: string, attempt = 0): Promise<string> {
+  // 25 s hard cap per Groq call — prevents a single slow/hung request from
+  // consuming the entire Vercel function budget (maxDuration = 300 s).
   const res = await fetch(GROQ_API, {
     method: 'POST',
     headers: {
@@ -68,15 +70,23 @@ async function callGroq(userPrompt: string, attempt = 0): Promise<string> {
       temperature: 0.3,
       max_tokens:  4000,  // synthesis JSON can be 1500-2500 tokens; be safe
     }),
+    signal: AbortSignal.timeout(25_000),  // 25 s cap: normal Groq call ~5-15 s
   })
 
-  if (res.status === 429 && attempt < 4) {
-    // Respetar el header Retry-After de Groq si viene; si no, backoff exponencial
+  if (res.status === 429 && attempt < 3) {
+    // Respect Groq's Retry-After header but cap it so we don't blow the
+    // Vercel function budget.  Without a cap, a 60 s Retry-After × 4 retries
+    // = 240 s of pure waiting, which reliably causes a 504.
+    // Budget math: 3 retries × (25 s fetch + 12 s wait) = 111 s per cluster.
+    // For 2 clusters that's 222 s — comfortably inside the 300 s limit.
     const retryAfterHeader = res.headers.get('retry-after')
-    const wait = retryAfterHeader
-      ? Math.ceil(parseFloat(retryAfterHeader)) * 1000
-      : Math.pow(2, attempt) * 8000 // 8s, 16s, 32s, 64s
-    console.warn(`[groq] Rate limited — waiting ${wait / 1000}s (attempt ${attempt + 1}/4)`)
+    const wait = Math.min(
+      retryAfterHeader
+        ? Math.ceil(parseFloat(retryAfterHeader)) * 1000
+        : Math.pow(2, attempt) * 4_000,  // 4 s, 8 s, 16 s
+      12_000                              // hard cap: never wait more than 12 s
+    )
+    console.warn(`[groq] Rate limited — waiting ${wait / 1000}s (attempt ${attempt + 1}/3)`)
     await new Promise((r) => setTimeout(r, wait))
     return callGroq(userPrompt, attempt + 1)
   }
