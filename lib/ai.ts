@@ -1,5 +1,9 @@
 const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions'
 
+export class GroqRateLimitError extends Error {
+  constructor() { super('Groq rate limit exhausted — retry later') }
+}
+
 const SYSTEM_PROMPT = `Sos un periodista neutral y experimentado argentino. Tu misión es analizar la misma noticia
 cubierta por distintos medios argentinos y producir un análisis objetivo e imparcial.
 Nunca tomás partido político. Tu objetivo es mostrar qué dice cada medio y qué omite,
@@ -73,22 +77,20 @@ async function callGroq(userPrompt: string, attempt = 0): Promise<string> {
     signal: AbortSignal.timeout(25_000),  // 25 s cap: normal Groq call ~5-15 s
   })
 
-  if (res.status === 429 && attempt < 3) {
-    // Respect Groq's Retry-After header but cap it so we don't blow the
-    // Vercel function budget.  Without a cap, a 60 s Retry-After × 4 retries
-    // = 240 s of pure waiting, which reliably causes a 504.
-    // Budget math: 3 retries × (25 s fetch + 12 s wait) = 111 s per cluster.
-    // For 2 clusters that's 222 s — comfortably inside the 300 s limit.
-    const retryAfterHeader = res.headers.get('retry-after')
-    const wait = Math.min(
-      retryAfterHeader
-        ? Math.ceil(parseFloat(retryAfterHeader)) * 1000
-        : Math.pow(2, attempt) * 4_000,  // 4 s, 8 s, 16 s
-      45_000                              // hard cap: up to 45 s to clear TPM limit
-    )
-    console.warn(`[groq] Rate limited — waiting ${wait / 1000}s (attempt ${attempt + 1}/3)`)
-    await new Promise((r) => setTimeout(r, wait))
-    return callGroq(userPrompt, attempt + 1)
+  if (res.status === 429) {
+    if (attempt < 2) {
+      const retryAfterHeader = res.headers.get('retry-after')
+      const wait = Math.min(
+        retryAfterHeader
+          ? Math.ceil(parseFloat(retryAfterHeader)) * 1000
+          : Math.pow(2, attempt) * 5_000,  // 5 s, 10 s
+        30_000
+      )
+      console.warn(`[groq] Rate limited — waiting ${wait / 1000}s (attempt ${attempt + 1}/2)`)
+      await new Promise((r) => setTimeout(r, wait))
+      return callGroq(userPrompt, attempt + 1)
+    }
+    throw new GroqRateLimitError()
   }
 
   if (!res.ok) throw new Error(`Groq API error: ${res.status} — ${await res.text().catch(() => '')}`)
@@ -161,11 +163,11 @@ export async function synthesizeCluster(
     const raw = await callGroq(prompt)
     const result = parseResponse(raw, articles)
     if (!result) {
-      // Log the first 300 chars of the raw response so we can diagnose parse failures
       console.error('[synthesis] parseResponse returned null. Raw response start:', raw.slice(0, 300))
     }
     return result
   } catch (err) {
+    if (err instanceof GroqRateLimitError) throw err  // let caller decide — don't delete cluster
     console.error('[synthesis] callGroq threw:', err)
     return null
   }

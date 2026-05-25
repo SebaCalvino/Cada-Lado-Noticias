@@ -30,7 +30,7 @@ import {
   scoreClusterQuality,
   type ArticleInput,
 } from './clustering'
-import { synthesizeCluster, type ArticleForSynthesis } from './ai'
+import { synthesizeCluster, GroqRateLimitError, type ArticleForSynthesis } from './ai'
 
 // ─── Generic-title filter ─────────────────────────────────────────────────────
 
@@ -577,13 +577,22 @@ export async function runSynthesize(
     // Use longer delay for synthesis (heavy token output) vs clustering.
     if (i > 0) await sleep(GROQ_SYNTH_DELAY_MS)
 
-    const synthesis = await synthesizeCluster(artsForSynthesis)
+    let synthesis
+    try {
+      synthesis = await synthesizeCluster(artsForSynthesis)
+    } catch (err) {
+      if (err instanceof GroqRateLimitError) {
+        console.warn(`[synthesize] Rate limited on cluster ${cluster.id} — leaving for next run`)
+        failed++
+        continue  // don't delete — will be retried on next invocation
+      }
+      throw err
+    }
 
     if (!synthesis) {
       console.warn(
         `[synthesize] Synthesis failed for cluster ${cluster.id} — deleting for retry`
       )
-      // Delete cluster + its links so articles re-enter the eligible pool
       await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
       await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
       failed++
