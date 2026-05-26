@@ -32,7 +32,9 @@ function checkAuth(req: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  void checkAuth(request) // temp: auth disabled for one-time cleanup
+  if (!checkAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const t0 = Date.now()
 
