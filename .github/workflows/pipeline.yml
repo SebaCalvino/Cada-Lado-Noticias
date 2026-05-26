@@ -63,9 +63,12 @@ jobs:
       - name: Health check
         if: always()
         run: |
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
-            "$SITE_URL/api/health" --max-time 10)
+          HTTP=$(curl -s -o /tmp/health.json -w "%{http_code}" \
+            "$SITE_URL/api/health" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 10)
           echo "Site health: HTTP $HTTP"
+          cat /tmp/health.json 2>/dev/null || true
           if [[ "$HTTP" != "200" ]]; then
             echo "::warning::Health check failed (HTTP $HTTP) — site may be down"
           fi
