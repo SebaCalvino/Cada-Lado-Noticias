@@ -5,7 +5,7 @@
  *   DIFFERENT topics never enter the same comparison batch — the primary
  *   defense against cross-topic false positives.
  *
- * Stage 2 — TF-IDF within topic: cosine similarity (threshold 0.40, raised
+ * Stage 2 — TF-IDF within topic: cosine similarity (threshold 0.30, raised
  *   from 0.22) plus a named-entity overlap guard.  An article pair only
  *   merges if their combined title+summary TF-IDF cosine clears the threshold
  *   AND they share at least one named entity (or neither article has any
@@ -288,13 +288,13 @@ function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): numbe
 
 /**
  * TF-IDF clustering with union-find.
- * Threshold 0.40: requires strong lexical overlap — articles must share
- * substantial vocabulary to be grouped.  Eliminates cross-topic false positives
- * caused by loosely related keywords.  Entity guard runs after this.
+ * Threshold 0.30: requires meaningful lexical overlap — articles must share
+ * substantial vocabulary to be grouped, while still handling the natural
+ * vocabulary variation in Spanish news.  Entity guard runs after this.
  */
 export function clusterArticles(
   articles: ArticleInput[],
-  threshold = 0.40
+  threshold = 0.30
 ): ClusterResult[] {
   if (articles.length < 2) return []
 
@@ -392,41 +392,14 @@ export function clusterIsCoherent(
   return (total / pairs) >= COHERENCE_MIN_AVG
 }
 
-// ── AI clustering (Groq) ──────────────────────────────────────────────────────
+// ── AI validation (Groq llama-3.1-8b-instant) ────────────────────────────────
+//
+// NEW APPROACH: TF-IDF proposes candidate clusters, 8b validates each one.
+// The model only answers SI/NO — "do these articles cover the SAME specific event?"
+// This is far more reliable than asking the model to create clusters from scratch,
+// which produced false positives like grouping Cedears + Ruta 7 + Disney together.
 
-// Prompt for AI clustering.
-// Balance: strict enough to avoid false positives (same theme ≠ same event),
-// but not so scary that the model refuses everything.
-// The two hard requirements are: (1) same specific event, (2) same protagonist.
-const CLUSTER_PROMPT_HEADER = `Sos un editor de noticias argentino. Identificá grupos de artículos que cubren EXACTAMENTE el mismo suceso específico.
-
-Para agrupar se deben cumplir LOS DOS requisitos:
-1. Mismo evento concreto — no solo el mismo tema (ej: "discapacidad", "política")
-2. Mismo protagonista principal — mismo nombre propio, institución o lugar específico
-
-NO agrupar si solo comparten una palabra temática genérica o categoría.
-Ejemplo de error: un artículo sobre ajuste a personas con discapacidad + uno sobre un loro con discapacidad → tema similar, protagonistas totalmente distintos → NO agrupar.
-
-Respondé SOLO con JSON:
-{"groups": [[1,3],[2,5,7]]}
-Sin grupos claros: {"groups": []}
-
-Artículos:
-`
-
-async function _runClusterBatch(
-  articles: ArticleInput[],
-  usedIds: Set<number>,
-  allArticlesForCoherence: ArticleInput[],
-): Promise<ClusterResult[]> {
-  if (articles.length < 2) return []
-
-  const numbered = articles
-    .map((a, i) => `${i + 1}. [${a.sourceSlug}] ${a.title}`)
-    .join('\n')
-
-  const prompt = CLUSTER_PROMPT_HEADER + numbered
-
+async function callGroq8b(prompt: string): Promise<string> {
   const callGroq = () =>
     fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -435,68 +408,53 @@ async function _runClusterBatch(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        // llama-3.3-70b-versatile: far better instruction following than 8b-instant
-        // at the same 30 RPM rate limit on Groq.  Override with GROQ_CLUSTER_MODEL.
-        model:       process.env.GROQ_CLUSTER_MODEL || 'llama-3.3-70b-versatile',
+        model:       'llama-3.1-8b-instant',
         messages:    [{ role: 'user', content: prompt }],
         temperature: 0.0,
-        max_tokens:  1500,
+        max_tokens:  10,  // only need SI or NO
       }),
-      signal: AbortSignal.timeout(20_000),  // prevent hanging and consuming function budget
+      signal: AbortSignal.timeout(10_000),
     })
 
+  let res = await callGroq()
+  if (res.status === 429) {
+    console.warn('[clustering-ai] 429 — waiting 30s then retrying once')
+    await new Promise(r => setTimeout(r, 30_000))
+    res = await callGroq()
+  }
+  if (!res.ok) throw new Error(`Groq ${res.status}`)
+
+  const data = await res.json()
+  return (data.choices[0]?.message?.content ?? '').trim().toUpperCase()
+}
+
+/**
+ * Validates a TF-IDF candidate cluster using llama-3.1-8b-instant.
+ * Returns true only if the model confirms all articles cover the SAME specific event.
+ */
+async function validateClusterWithAI(articles: ArticleInput[]): Promise<boolean> {
+  const lines = articles
+    .map(a => `- [${a.sourceSlug}] ${a.title}${a.summary ? ': ' + a.summary.slice(0, 120) : ''}`)
+    .join('\n')
+
+  const prompt =
+    `¿Estos artículos de noticias cubren EXACTAMENTE el mismo evento o hecho específico?\n\n` +
+    `${lines}\n\n` +
+    `Reglas:\n` +
+    `- SI = todos hablan del mismo evento concreto (mismo hecho, mismo protagonista)\n` +
+    `- NO = son temas distintos, eventos distintos, o solo comparten una categoría general\n\n` +
+    `Respondé SOLO con SI o NO.`
+
   try {
-    let res = await callGroq()
-    if (res.status === 429) {
-      console.warn('[clustering-ai] 429 — waiting 35s then retrying once')
-      await new Promise(r => setTimeout(r, 35_000))
-      res = await callGroq()
-    }
-    if (!res.ok) { console.warn(`[clustering-ai] Groq error ${res.status}`); return [] }
-
-    const data = await res.json()
-    let raw = data.choices[0].message.content.trim()
-    if (raw.startsWith('```')) raw = raw.replace(/```[a-z]*\n?/g, '').trim()
-
-    const parsed = JSON.parse(raw) as { groups: number[][] }
-    const clusters: ClusterResult[] = []
-
-    for (const group of (parsed.groups || [])) {
-      const idxs = group.map(n => n - 1).filter(i => i >= 0 && i < articles.length)
-      if (idxs.length < 2) continue
-
-      const arts  = idxs.map(i => articles[i])
-      const slugs = arts.map(a => a.sourceSlug)
-      if (new Set(slugs).size < 2) continue
-
-      const freshArts = arts.filter(a => !usedIds.has(a.id))
-      if (freshArts.length < 2 || new Set(freshArts.map(a => a.sourceSlug)).size < 2) continue
-
-      // NOTE: No entity or coherence guards here.
-      //
-      // The AI prompt is already strict enough ("same specific event, ≥1 shared
-      // named entity, ≥90% confidence").  Running TF-IDF coherence on top of
-      // AI confirmation causes critical false negatives: outlets deliberately
-      // use different vocabulary for the same event (e.g. Clarín says "acuerdo
-      // con el FMI", Página 12 says "capitulación ante el Fondo") and the cosine
-      // between those two articles is near zero even though they cover the same
-      // fact.  Trust the AI.  Remove this comment if you add better validation.
-
-      for (const a of freshArts) usedIds.add(a.id)
-      const simScores: Record<number, number> = {}
-      for (const a of freshArts) simScores[a.id] = 0.5
-
-      clusters.push({
-        articleIds:       freshArts.map(a => a.id),
-        sourceSlugs:      freshArts.map(a => a.sourceSlug),
-        similarityScores: simScores,
-      })
-    }
-
-    return clusters
+    const answer = await callGroq8b(prompt)
+    const valid = answer.startsWith('SI') || answer === 'SÍ'
+    if (!valid) console.log(`  [validate] ✗ rejected: ${articles.map(a => a.title.slice(0, 40)).join(' | ')}`)
+    return valid
   } catch (err) {
-    console.warn('[clustering-ai] batch failed:', err)
-    return []
+    // On error (rate limit already retried), accept TF-IDF result — better
+    // than dropping valid clusters during API outages
+    console.warn('[clustering-ai] validation failed, accepting TF-IDF result:', err)
+    return true
   }
 }
 
@@ -507,82 +465,57 @@ export async function clusterArticlesWithAI(
 ): Promise<ClusterResult[]> {
   if (articles.length < 2) return []
 
+  // Stage 1: classify topics for logging only
   type Tagged = ArticleInput & { topic: string }
   const tagged: Tagged[] = articles.map(a => ({
     ...a,
     topic: classifyTopic(`${a.title} ${a.summary}`),
   }))
+  const topicCounts: Record<string, number> = {}
+  for (const a of tagged) topicCounts[a.topic] = (topicCounts[a.topic] ?? 0) + 1
+  console.log(`[clustering] Topics — ${Object.entries(topicCounts).map(([t,n]) => `${t}:${n}`).join(' ')}`)
 
-  const byTopic = new Map<string, Tagged[]>()
-  for (const a of tagged) {
-    if (!byTopic.has(a.topic)) byTopic.set(a.topic, [])
-    byTopic.get(a.topic)!.push(a)
-  }
-
-  const topicSummary = [...byTopic.entries()]
-    .map(([t, arts]) => `${t}:${arts.length}`)
-    .join(' ')
-  console.log(`[clustering] Topics — ${topicSummary}`)
+  // Stage 2: TF-IDF candidate clusters (threshold 0.22 — permissive to find candidates)
+  // Stage 3: llama-3.1-8b validates each candidate with a simple SI/NO question
+  //
+  // This replaces the old approach of asking the AI to CREATE clusters from scratch,
+  // which produced false positives (grouping unrelated articles that shared generic words).
+  // Now TF-IDF proposes, 8b validates. Much more reliable.
+  const candidates = clusterArticles(articles, 0.22)
+  console.log(`[clustering] TF-IDF found ${candidates.length} candidates → validating with 8b`)
 
   const allClusters: ClusterResult[] = []
-  const usedIds     = new Set<number>()
-  let   batchCount  = 0
+  const usedIds = new Set<number>()
+  let validated = 0
+  let rejected  = 0
 
-  for (const [topic, topicArts] of byTopic) {
-    if (topicArts.length < 2) continue
+  for (const candidate of candidates) {
+    const freshIds = candidate.articleIds.filter(id => !usedIds.has(id))
+    if (freshIds.length < 2) continue
 
-    // Stage 2: TF-IDF within topic — entity guard still applied on results
-    const tfidfClusters = clusterArticles(topicArts, 0.40)
-    for (const c of tfidfClusters) {
-      const freshIds   = c.articleIds.filter(id => !usedIds.has(id))
-      const freshSlugs = freshIds.map(id => topicArts.find(a => a.id === id)!.sourceSlug)
-      if (freshIds.length < 2 || new Set(freshSlugs).size < 2) continue
+    const arts  = freshIds.map(id => articles.find(a => a.id === id)!).filter(Boolean)
+    const slugs = new Set(arts.map(a => a.sourceSlug))
+    if (slugs.size < 2) continue
+
+    // Small delay between AI calls to respect rate limits
+    if (validated + rejected > 0) await new Promise(r => setTimeout(r, 2_200))
+
+    const isValid = await validateClusterWithAI(arts)
+
+    if (isValid) {
       for (const id of freshIds) usedIds.add(id)
-      allClusters.push({ ...c, articleIds: freshIds, sourceSlugs: freshSlugs })
-    }
-
-    // Stage 3: AI for articles not yet clustered (within same topic)
-    const unclustered = topicArts.filter(a => !usedIds.has(a.id))
-    if (unclustered.length < 2) continue
-
-    if (batchCount > 0) await new Promise(r => setTimeout(r, 2_500))
-
-    console.log(`[clustering-ai] Topic "${topic}": ${unclustered.length} articles → AI`)
-    const aiClusters = await _runClusterBatch(unclustered, usedIds, articles)
-    allClusters.push(...aiClusters)
-    batchCount++
-  }
-
-  // ── Stage 4: Cross-topic fallback ─────────────────────────────────────────
-  //
-  // Articles from different sources often get classified into DIFFERENT topic
-  // buckets for the same story — e.g. "Milei + FMI" lands in "politica" for
-  // source A but "economia" for source B.  Those never see each other in the
-  // per-topic passes above.
-  //
-  // Fix: collect ALL remaining unclustered articles and run one final AI pass
-  // on them.  The AI prompt is strict enough to avoid cross-topic false positives.
-  // We batch at 20 articles max to keep the prompt manageable.
-  const remaining = articles.filter(a => !usedIds.has(a.id))
-  if (remaining.length >= 2) {
-    const CROSS_BATCH = 20
-    for (let start = 0; start < remaining.length; start += CROSS_BATCH) {
-      const batch = remaining.slice(start, start + CROSS_BATCH)
-      if (batch.length < 2) break
-
-      if (batchCount > 0) await new Promise(r => setTimeout(r, 2_500))
-
-      console.log(
-        `[clustering-ai] Cross-topic fallback batch ${Math.floor(start / CROSS_BATCH) + 1}: ` +
-        `${batch.length} articles → AI`
-      )
-      const crossClusters = await _runClusterBatch(batch, usedIds, articles)
-      allClusters.push(...crossClusters)
-      batchCount++
+      allClusters.push({
+        articleIds:       freshIds,
+        sourceSlugs:      arts.map(a => a.sourceSlug),
+        similarityScores: candidate.similarityScores,
+      })
+      validated++
+    } else {
+      rejected++
     }
   }
 
-  console.log(`[clustering] Done — ${allClusters.length} clusters from ${articles.length} articles`)
+  console.log(`[clustering] Done — ${validated} validated, ${rejected} rejected by AI, from ${articles.length} articles`)
   return allClusters
 }
 
