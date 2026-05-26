@@ -91,9 +91,11 @@ const GROQ_CALL_DELAY_MS = 2_200
 
 /**
  * Pause between consecutive Groq synthesis calls.
- * Only used when MAX_CLUSTERS > 1. With 1 cluster/invocation this never fires.
+ * Groq free tier: ~6k TPM for llama-3.3-70b-versatile, each synthesis ~2-3k tokens.
+ * Clustering also draws from the same quota, so we need more headroom than the
+ * raw TPM math suggests.  35 s gives ~2 synthesis calls per minute comfortably.
  */
-const GROQ_SYNTH_DELAY_MS = 20_000
+const GROQ_SYNTH_DELAY_MS = 35_000
 
 /** Expand the article window to 96 h if fewer than this many are available. */
 const MIN_ARTICLES_FOR_CLUSTERING = 5
@@ -573,6 +575,11 @@ export async function runSynthesize(
     const distinctSources = new Set(articleRows.map(r => r.source.slug))
     if (articleRows.length < 2 || distinctSources.size < 2) {
       console.warn(`[synthesize] Cluster ${cluster.id} has <2 sources — deleting`)
+      // Reset clustered flag so these articles re-enter the eligible pool next run
+      const idsToReset = articleRows.map(r => r.article.id)
+      if (idsToReset.length > 0) {
+        await db.update(rawArticles).set({ clustered: false }).where(inArray(rawArticles.id, idsToReset))
+      }
       await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
       await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
       failed++
@@ -600,13 +607,26 @@ export async function runSynthesize(
         failed++
         continue  // don't delete — will be retried on next invocation
       }
+      // Transient error (timeout/network) — leave cluster pending for next run
+      if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        console.warn(`[synthesize] Timeout on cluster ${cluster.id} — leaving for next run`)
+        failed++
+        continue
+      }
       throw err
     }
 
     if (!synthesis) {
+      // Groq returned unparseable output — reset articles so they can re-cluster
+      // on the next run rather than being permanently lost with clustered=true
+      // but no cluster row to show for it.
       console.warn(
-        `[synthesize] Synthesis failed for cluster ${cluster.id} — deleting for retry`
+        `[synthesize] Synthesis failed (bad output) for cluster ${cluster.id} — resetting articles for retry`
       )
+      const idsToReset = articleRows.map(r => r.article.id)
+      if (idsToReset.length > 0) {
+        await db.update(rawArticles).set({ clustered: false }).where(inArray(rawArticles.id, idsToReset))
+      }
       await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
       await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
       failed++
@@ -622,6 +642,10 @@ export async function runSynthesize(
         `[synthesize] Cluster ${cluster.id} rejected — title too generic: ` +
         `"${synthesis.title}"`
       )
+      const idsToReset = articleRows.map(r => r.article.id)
+      if (idsToReset.length > 0) {
+        await db.update(rawArticles).set({ clustered: false }).where(inArray(rawArticles.id, idsToReset))
+      }
       await db.delete(clusterArticles).where(eq(clusterArticles.clusterId, cluster.id))
       await db.delete(newsClusters).where(eq(newsClusters.id, cluster.id))
       failed++

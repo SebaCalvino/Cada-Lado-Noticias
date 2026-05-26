@@ -442,13 +442,14 @@ async function _runClusterBatch(
         temperature: 0.0,
         max_tokens:  1500,
       }),
+      signal: AbortSignal.timeout(20_000),  // prevent hanging and consuming function budget
     })
 
   try {
     let res = await callGroq()
     if (res.status === 429) {
-      console.warn('[clustering-ai] 429 — waiting 20s then retrying')
-      await new Promise(r => setTimeout(r, 20_000))
+      console.warn('[clustering-ai] 429 — waiting 35s then retrying once')
+      await new Promise(r => setTimeout(r, 35_000))
       res = await callGroq()
     }
     if (!res.ok) { console.warn(`[clustering-ai] Groq error ${res.status}`); return [] }

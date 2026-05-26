@@ -168,6 +168,8 @@ export async function synthesizeCluster(
     return result
   } catch (err) {
     if (err instanceof GroqRateLimitError) throw err  // let caller decide — don't delete cluster
+    // Transient errors (network, timeout) — let caller leave cluster for retry rather than deleting it
+    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) throw err
     console.error('[synthesis] callGroq threw:', err)
     return null
   }
