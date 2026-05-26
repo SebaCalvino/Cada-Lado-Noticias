@@ -24,8 +24,9 @@ function checkAuth(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  // Auth temporarily disabled for one-time orphan reset — revert after use
-  void checkAuth(request)
+  if (!checkAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   let hours = 48
   try {
