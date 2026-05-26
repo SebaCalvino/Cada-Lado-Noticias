@@ -5,8 +5,8 @@
  *   DIFFERENT topics never enter the same comparison batch — the primary
  *   defense against cross-topic false positives.
  *
- * Stage 2 — TF-IDF within topic: cosine similarity (threshold 0.22, raised
- *   from 0.15) plus a named-entity overlap guard.  An article pair only
+ * Stage 2 — TF-IDF within topic: cosine similarity (threshold 0.40, raised
+ *   from 0.22) plus a named-entity overlap guard.  An article pair only
  *   merges if their combined title+summary TF-IDF cosine clears the threshold
  *   AND they share at least one named entity (or neither article has any
  *   extractable entity, in which case the TF-IDF alone decides).
@@ -18,7 +18,7 @@
  *
  * Stage 4 — Coherence guard: every cluster (TF-IDF or AI) is verified with
  *   a lightweight TF-IDF cosine test.  A cluster is rejected if the AVERAGE
- *   pairwise cosine falls below 0.08, even if some individual pairs are
+ *   pairwise cosine falls below 0.20, even if some individual pairs are
  *   similar (previously: any single pair >= 0.05 was enough — too loose).
  *
  * Key principle: false negatives (missed clusters) are far better than false
@@ -288,13 +288,13 @@ function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): numbe
 
 /**
  * TF-IDF clustering with union-find.
- * Threshold 0.18: high enough to filter single shared keyword false positives
- * (e.g. two articles sharing only "discapacidad"), low enough for same-event
- * pairs that use different vocabulary.  Entity guard runs after this.
+ * Threshold 0.40: requires strong lexical overlap — articles must share
+ * substantial vocabulary to be grouped.  Eliminates cross-topic false positives
+ * caused by loosely related keywords.  Entity guard runs after this.
  */
 export function clusterArticles(
   articles: ArticleInput[],
-  threshold = 0.18
+  threshold = 0.40
 ): ClusterResult[] {
   if (articles.length < 2) return []
 
@@ -366,7 +366,7 @@ export function clusterArticles(
 // COHERENCE_MIN_AVG.  The old check (any single pair >= 0.05) was too loose —
 // one semi-similar pair could smuggle in several unrelated articles.
 
-const COHERENCE_MIN_AVG = 0.08  // was: any pair >= 0.05
+const COHERENCE_MIN_AVG = 0.20  // raised from 0.08 — clusters need real coherence
 
 export function clusterIsCoherent(
   articleIds: number[],
@@ -532,7 +532,7 @@ export async function clusterArticlesWithAI(
     if (topicArts.length < 2) continue
 
     // Stage 2: TF-IDF within topic — entity guard still applied on results
-    const tfidfClusters = clusterArticles(topicArts, 0.18)
+    const tfidfClusters = clusterArticles(topicArts, 0.40)
     for (const c of tfidfClusters) {
       const freshIds   = c.articleIds.filter(id => !usedIds.has(id))
       const freshSlugs = freshIds.map(id => topicArts.find(a => a.id === id)!.sourceSlug)
