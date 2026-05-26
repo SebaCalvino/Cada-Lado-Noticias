@@ -34,7 +34,7 @@ export const maxDuration = 300  // llama-3.3-70b takes ~20s/cluster; 10 × 22s =
 // where this one left off.
 // 1 cluster per invocation: worst case 3 retries × (25 s fetch + 45 s wait) = 210 s < 300 s.
 // The cron calls synthesize each cycle so the backlog drains incrementally.
-const MAX_CLUSTERS = 1
+const MAX_CLUSTERS = 10
 
 function checkAuth(req: NextRequest): boolean {
   if (!process.env.CRON_SECRET) return true
