@@ -28,13 +28,13 @@ RULES:
 5. Default to valid=false if uncertain`
 
   try {
-    const msg = await groq.messages.create({
+    const msg = await groq.chat.completions.create({
       model: 'llama-3.1-8b-instant',
       max_tokens: 150,
       messages: [{ role: 'user', content: prompt }],
     })
 
-    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    const text = msg.choices[0]?.message?.content ?? ''
     const match = text.match(/\{[\s\S]*\}/)
     if (!match) return { valid: false, confidence: 0, reason: 'Parse error' }
 
